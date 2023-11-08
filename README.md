@@ -1,5 +1,6 @@
 # AutoVR
-Everything in ts needs to be compiled. index.out.js is the compiled ts code and is the only ts depeendency that run.py needs.
+Everything in ts needs to be compiled. index.out.js is the compiled ts code and is the only ts depeendency that run.py needs. To compile, run the compile.sh script in the ts folder to produce the index.out.js file.
+
 
 Usage: python3 run.py \<device name\> \<host package\> \<script.json\>
 
