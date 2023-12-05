@@ -265,8 +265,10 @@ def init(curr_scene):
     _ui_events[curr_scene] = []
 
 
-def frida_kill(device_name):
+def frida_kill(device_name, pid=0, rooted=False):
     command = ['frida-kill', '-D', device_name, 'Gadget']
+    if rooted:
+        command = ['frida-kill', '-D', device_name, f'{pid}']
     process = subprocess.Popen(command)
     try:
         process.wait(3)

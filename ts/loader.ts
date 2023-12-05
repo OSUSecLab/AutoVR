@@ -307,7 +307,7 @@ export class Loader {
 
   public static async start() {
     console.log("Attatching...");
-    // Loader.bypassSSLPinning();
+    Loader.bypassSSLPinning();
     console.log("Loading Il2Cpp...");
     return Il2Cpp.perform(() => {
       console.log("Loaded Il2Cpp");
