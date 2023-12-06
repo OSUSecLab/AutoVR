@@ -577,7 +577,7 @@ export class EventTriggerer {
           }
         }
         await this.triggerEventsOfObjs(emMethod, eObjs);
-        await wait(50);
+        await wait(300);
         i++;
       }
     }
@@ -762,7 +762,7 @@ export class EventTriggerer {
               20000, this.triggerCollision(method, unboxed, colliders));
           break;
         }
-        await wait(50);
+        await wait(500);
       } catch (e) {
         console.log(e);
       }

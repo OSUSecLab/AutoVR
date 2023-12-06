@@ -54,7 +54,6 @@ export class Loader {
   }
 
   private static bypassSSLPinning() {
-    APIHooker.bypassJavaSSLPinning();
     let function_offset: string|undefined = undefined;
     let use_mbed_tls: boolean = true;
     const op = recv('cert_func', jsonStr => {
@@ -63,6 +62,7 @@ export class Loader {
     });
     op.wait();
     if (function_offset) {
+      APIHooker.bypassJavaSSLPinning();
       console.log("FUNCTION OFFSET:", function_offset);
       APIHooker.bypassUnitySSLPinning(new NativePointer(function_offset),
                                       use_mbed_tls);

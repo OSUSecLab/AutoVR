@@ -392,8 +392,8 @@ async def run(script, host, states):
             end_time = time.time()
             branch_count = inital_branch_count + next_branch_count
 
-            print_results(host, curr_scene, branch_count,
-                          end_time - start_time)
+            #print_results(host, curr_scene, branch_count,
+            #              end_time - start_time)
 
             print("Time taken:", end_time - start_time)
             print("Scene: ", curr_scene, " | ", "Objects:",
