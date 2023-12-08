@@ -11,7 +11,6 @@ from mi_builder import *
 from cfg_payload import PayloadBuilder
 import asyncio
 from threading import *
-from run_bypass_all_ssl_pinnings import *
 
 protocol = rpc.RPC()
 target_methods = ["LoadSceneAsync"]
@@ -63,6 +62,10 @@ def on_message(message, data):
         print(payload)
         if payload["type"] == "targets":
             data = []
+            for event in _events:
+                pb = PayloadBuilder()
+                pb.add_mi(event, _resolved)
+                data.append(pb.data)
             script.post({'type': 'targets', 'payload': json.dumps(data)})
         elif payload["type"] == "events_to_analyze":
             events = payload["data"]
@@ -268,7 +271,7 @@ def init(curr_scene):
 def frida_kill(device_name, pid=0, rooted=False):
     command = ['frida-kill', '-D', device_name, 'Gadget']
     if rooted:
-        command = ['frida-kill', '-D', device_name, f'{pid}']
+        command = ['frida-kill', '-D', device_name, f"{pid}"]
     process = subprocess.Popen(command)
     try:
         process.wait(3)
@@ -297,8 +300,22 @@ def spawn_package(device_name, package):
     return True
 
 
+async def main():
+    n = len(sys.argv)
+    if n != 3:
+        print("Usage: python3 run.py <host package> <script.json>")
+        exit()
+    host = sys.argv[1]
+    file = sys.argv[2]
+    print(host)
+    print(file)
+    num_scenes = await count_scenes()
+    await run(host, file, num_scenes, 0)
+
+
 def setup(device_name, host, ssl_offset='', use_mbed_tls=True):
-    frida_kill(device_name)
+    #frida_kill(device_name)
+
     if not spawn_package(device_name, host):
         return (None, None, None)
 
@@ -309,16 +326,15 @@ def setup(device_name, host, ssl_offset='', use_mbed_tls=True):
     #pid = device.spawn([gadget])  # 're.frida.Gadget' if running gadget
     pid = device.get_frontmost_application(scope="full").pid
     session = device.attach(pid, persist_timeout=30)
-    script = session.create_script(open("../ts/index.out.js").read())
+    script = session.create_script(open("index.out.js").read())
 
     protocol.set_export_sync(script.exports_sync)
     protocol.set_export_async(script.exports_async)
     script.load()
     script.on('message', on_message)
 
-    setup_ssl_pin_offset(script, ssl_offset, use_mbed_tls)
-
-    #setup_base(script, device, pid, file)
+    if ssl_offset != '':
+        setup_ssl_pin_offset(script, ssl_offset, use_mbed_tls)
 
     return (script, device, pid)
 
@@ -332,7 +348,7 @@ def setup_ssl_pin_offset(script, offset, use_mbed_tls):
 
 
 def setup_base(script, device, pid, file):
-    if os.path.exists(file):
+    if file != '' and os.path.exists(file):
         f = open(file, "r")
         on = json.loads(f.read())
         script.post({'type': 'input', 'payload': json.dumps(on)})
@@ -366,11 +382,6 @@ async def run(script, host, states):
     global _resolved_deps
 
     num_scenes = states["num_scenes"]
-
-    if num_scenes == 0:
-        num_scenes = await count_scenes()
-        states["num_scenes"] = num_scenes
-
     start_scene = states["curr_scene"]
 
     start_time = time.time()
@@ -408,36 +419,6 @@ async def run(script, host, states):
         except Exception as err:
             print(err)
             continue
-
-
-async def main():
-    n = len(sys.argv)
-    if n != 3:
-        print(
-            "Usage: python3 run.py <device_name> <host package> <script.json>")
-        exit()
-    device_name = sys.argv[1]
-    host = sys.argv[2]
-    script_file = sys.argv[3]
-
-    # Directory where you dumped the apk using apktool
-    dumped_apk_dir = ''
-    # Directoy to where all libunity.so files are stored
-    libunity_directory = ''
-
-    ssl_offset = None
-    use_mbed_tls = False
-    (ssl_offset,
-     use_mbed_tls) = SSLOffsetFinder(dumped_apk_dir,
-                                     libunity_directory).find_offset()
-    script, device, pid = setup(device_name, host, ssl_offset, use_mbed_tls)
-    setup_base(script, device, pid, script_file)
-    device.resume()
-    states = {}
-    if states["num_scenes"] == -1:
-        states["num_scenes"] = count_scenes()
-
-    await run(script, host, states)
 
 
 # if wanted to run standalone.
