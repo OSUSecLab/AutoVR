@@ -13,6 +13,9 @@ let blacklist = [
   "System.Char", "System.Type", "Unity.Profiling.ProfilerMarker"
 ]; // List of classes to exclude from event finding
 
+const TIME_BETWEEN_EVENTS = 2000;
+const TIME_BETWEEN_PHYSICS = 3000;
+
 export interface Event {
   event: string;
   sequence: Array<string>;
@@ -315,7 +318,7 @@ export class EventLoader {
             if (grc) {
               let rc = grc.invoke(event);
               all_calls.push(rc);
-              EventTriggerer.hookUnityEventInvoke(rc);
+              // EventTriggerer.hookUnityEventInvoke(rc);
             }
           }
 
@@ -323,7 +326,7 @@ export class EventLoader {
           for (const icl_call of icl_calls) {
             for (var i = 0; i < icl_call.length; i++) {
               all_calls.push(icl_call.get(i));
-              EventTriggerer.hookUnityEventInvoke(icl_call.get(i));
+              // EventTriggerer.hookUnityEventInvoke(icl_call.get(i));
             }
           }
 
@@ -457,17 +460,17 @@ export class EventTriggerer {
       if (method.name === "Invoke") {
         let invoke = ue.tryMethod(method.name, method.parameterCount);
         if (invoke) {
+          console.log(invoke);
           if (method.parameterCount > 0) {
             invoke.implementation = function(v1: any): any {
               let ret = invoke!.invoke(v1);
-              console.log("Invoke called", ue, v1);
+              console.log("Invoke called", ue, v1, ret);
               return ret;
             };
-
           } else {
             invoke.implementation = function(): any {
-              console.log("Invoke called", ue);
               let ret = invoke!.invoke();
+              console.log("Invoke called", ue, ret);
               return ret;
             };
           }
@@ -583,7 +586,7 @@ export class EventTriggerer {
     }
   }
 
-  private async triggerUI(method: Il2Cpp.Method) {
+  private async triggerUI(obj: Il2Cpp.Object, method: Il2Cpp.Method) {
     let events = this.loader.efcs;
     let res = {
       "type" : "UI",
@@ -591,26 +594,38 @@ export class EventTriggerer {
       "data" : method.class.name + "$$" + method.name
     };
     send(JSON.stringify(res));
+    // TODO: Too much nesting, clean.
     if (events.has(method.virtualAddress.toString())) {
       let efcs = events.get(method.virtualAddress.toString())!;
       for (const fc of efcs) {
         try {
           let compMethod = fc.tryMethod("Invoke");
           if (compMethod) {
-            console.log("INVOKING", method.name);
+            console.log("INVOKING", obj, method.name);
             if (this.countBoolParams(compMethod) > 0) {
-              for (var j = 0; j < 2; j++) {
-                const argsList =
-                    this.generateArguments(compMethod, j == 1 ? true : false);
-                await compMethod.invoke(...argsList);
-              }
+              await Util.runOnAllThreads(() => {
+                if (compMethod) {
+                  for (var j = 0; j < 2; j++) {
+                    const argsList = this.generateArguments(
+                        compMethod, j == 1 ? true : false);
+                    compMethod.invoke(...argsList);
+                  }
+                }
+              });
             } else {
-              await compMethod.invoke();
+              // Sometimes these methods are accessing obejcts from different
+              // threads. The best chance is to try to invoke this methods on
+              // all possible threads.
+              await Util.runOnAllThreads(() => {
+                if (compMethod) {
+                  compMethod.invoke();
+                }
+              });
             }
             console.log("INVOKED", method.name);
           }
         } catch (e) {
-          console.log(e);
+          console.log("UI UI UI:", e);
         }
       }
     }
@@ -626,30 +641,13 @@ export class EventTriggerer {
       return comp.method(method.name, method.parameterCount).invoke(v1);
     };
     let trigger_count = 0;
-    if (compMethod) {
-      for (const collider of colliders) {
-        try {
-          if (collider.isNull())
-            continue;
+    for (const collider of colliders) {
+      await Util.runOnAllThreads(() => {
+        if (compMethod && !collider.isNull()) {
           compMethod.invoke(collider);
           trigger_count++;
-        } catch (err: any) {
-          for (const thread of Il2Cpp.attachedThreads) {
-            thread.schedule(() => {
-              if (compMethod) {
-                try {
-                  // console.log("invoking trigger");
-                  compMethod.invoke(collider);
-                  trigger_count++;
-                } catch (err: any) {
-                  console.log(err)
-                }
-              }
-            });
-          }
-          continue;
         }
-      }
+      });
     }
     let res = {
       "type" : "triggers",
@@ -685,6 +683,7 @@ export class EventTriggerer {
     };
     // console.log("COLLISION SINK", sinkGO);
     // console.log("COLLISIONABLES", collisionables);
+    // TODO: runOnAllThreads here
     let collision_count = 0
     for (var i = 0; i < collisionables.length; i++) {
       try {
@@ -747,7 +746,7 @@ export class EventTriggerer {
       try {
         let unboxed = obj.unbox();
         if (!isCollisionEvent && !isTriggerEvent) {
-          await promiseTimeout(20000, this.triggerUI(method));
+          await promiseTimeout(20000, this.triggerUI(obj.unbox(), method));
         } else if (isTriggerEvent) {
           // Static colliders may not be triggered together, according to
           // physics rule matrix.
@@ -762,7 +761,7 @@ export class EventTriggerer {
               20000, this.triggerCollision(method, unboxed, colliders));
           break;
         }
-        await wait(500);
+        await wait(TIME_BETWEEN_PHYSICS);
       } catch (e) {
         console.log(e);
       }
@@ -770,8 +769,11 @@ export class EventTriggerer {
   }
 
   private async loadNextEvents() {
-    return this.loader.getEventFunctionCallbacks(
-        await Util.getAllActiveObjects());
+    const triggeredEvents = TriggeredEvents.getInstance();
+    // Get all events loaded but ignore already triggered events.
+    return this.loader
+        .getEventFunctionCallbacks(await Util.getAllActiveObjects())
+        .filter((event) => !triggeredEvents.contains(event));
   }
 
   public sendTriggeredEvents() {
@@ -807,8 +809,8 @@ export class EventTriggerer {
       } else {
         await this.invokeSequenceMethod(emMethod, eObjs, sequence);
       }
-      // Wait 1 sec between event groups to avoid breaking
-      await wait(1000);
+      // Wait between event groups to avoid breaking
+      await wait(TIME_BETWEEN_EVENTS);
     }
     return await this.loadNextEvents();
   }
@@ -840,7 +842,7 @@ export class EventTriggerer {
           await this.invokeSequenceMethod(emMethod, eObjs, sequence);
         }
         // Wait 1 sec between event groups to avoid breaking
-        await wait(1000);
+        await wait(TIME_BETWEEN_EVENTS);
       }
       let nextEvents = await this.loadNextEvents();
       if (nextEvents.length > 1) {

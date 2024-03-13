@@ -71,6 +71,25 @@ export class Loader {
     }
   }
 
+  private static bypassEntitlements() {
+    let oculusPlatform = Il2Cpp.domain.tryAssembly("Oculus.Platform.dll")
+    if (oculusPlatform != null) {
+      let img = oculusPlatform.image;
+      console.log("Timing");
+      let capi = img.tryClass("Oculus.Platform.CAPI");
+      if (capi != null) {
+        capi.method<void>("ovr_Entitlement_GetIsViewerEntitled")
+            .implementation = function() {
+          // TODO: seems like most games don't check return value, but it might
+          // be worth looking into creating a fake UInt64 object that points to
+          // a succeeded Message.
+          console.log("Entitlements called, returning nothing.");
+          return 0;
+        };
+      }
+    }
+  }
+
   /** Resolves all methods of all classes. */
   private static resolveAllMethods(img: Il2Cpp.Image) {
     console.log("Resolving methods from " + img.name);
@@ -83,22 +102,18 @@ export class Loader {
   private static init() {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
-    // Il2Cpp.installExceptionListener("all");
+    // To see exceptions:
+    Il2Cpp.installExceptionListener("all");
+
+    Loader.bypassEntitlements();
     Loader.resolveSymbols();
+
     Il2Cpp.domain.assemblies.forEach(assemb => {
       let img = assemb.image;
       Loader.resolveAllMethods(img);
       ClassLoader.resolveRequiredClasses(img);
     });
-    Loader.preventAppQuit();
-    // APIHooker.bypassUnitySSLPinningIl2Cpp();
-    // APIHooker.hookCAPI(curr_scene);
-    //    APIHooker.hookSysInfo(curr_scene);
-    //    APIHooker.hookBoundsTracking(curr_scene);
-    //    APIHooker.hookLocation(curr_scene);
-    //    APIHooker.hookUploadHandlerData(curr_scene);
-    //    APIHooker.hookNetworkSends(curr_scene);
-    //    APIHooker.hookAnalytics();
+
     let obj = {
       "base" : Il2Cpp.module.base.toString(),
       "all_methods" : AllMethods.getInstance().toEntriesWithName()
@@ -125,7 +140,7 @@ export class Loader {
         };
         curr_event = '';
         curr_scene = scene_index;
-        Loader.loadScene("", scene_index, true);
+        // Loader.loadScene("", scene_index, true);
       });
       let scene = await promise;
       console.log(scene, scene.length);
@@ -196,11 +211,15 @@ export class Loader {
 
   public static async unloadScene(sceneName: string, index: number) {
     let instance = Classes.getInstance();
-    await Il2Cpp.mainThread.schedule(() => {
-      var sss = Il2Cpp.reference(true);
+    console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
+    return Il2Cpp.mainThread.schedule(() => {
+      let sceneIndicies = Loader.getScenes(false);
+      var sss = Il2Cpp.reference(false);
       let UnloadSceneOptions = instance.UnloadSceneOptions;
       let SceneManager = instance.SceneManager;
-      if (UnloadSceneOptions && SceneManager) {
+      if (sceneIndicies && sceneIndicies.includes(index) &&
+          UnloadSceneOptions && SceneManager) {
+        console.log("UNLOAD SCENE", index);
         SceneManager.method("UnloadSceneNameIndexInternal")
             .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""), index,
                            true,
@@ -209,6 +228,7 @@ export class Loader {
                                .value,
                            sss);
       }
+      console.log("inner AFTER SCENE_COUNT =", Loader.getScenes(false));
     });
   }
 
@@ -251,14 +271,14 @@ export class Loader {
     }
   }
 
-  public static getScenes(nameOnly: boolean): Il2Cpp.Object[]|string[]|null {
+  public static getScenes(nameOnly: boolean): number[]|null {
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
       let SceneManager = instance.SceneManager
       var getSceneCount = SceneManager.tryMethod("get_sceneCount")
       if (getSceneCount) {
         var sceneCount = getSceneCount.executeStatic() as number;
-        var scenes: Il2Cpp.Object[] = [];
+        var scenes: number[] = [];
         var sceneNames: string[] = [];
         var scene: Il2Cpp.Object;
         var sceneName: string|null;
@@ -268,7 +288,7 @@ export class Loader {
           scene = (SceneManager.method("GetSceneAt").executeStatic(i) as
                    Il2Cpp.ValueType)
                       .box();
-          scenes.push(scene);
+          scenes.push(scene.method<number>("get_buildIndex").invoke());
 
           if (nameOnly) {
             let sn = scene.method<Il2Cpp.String>("get_name").invoke();
@@ -276,41 +296,53 @@ export class Loader {
               sceneNames.push(sn.content!);
           }
         }
-        if (nameOnly)
-          return sceneNames;
-        else
-          return scenes;
+        return scenes;
       }
     }
     return [];
   }
 
   public static async countAllScenes() {
-    var launcherScenes: string[] = Loader.getScenes(true) as string[];
-
-    var sceneCount = 0;
-    var ret = null;
-    for (var i = 1; i < 40; i++) {
-      ret = Loader.loadScene("", i, true);
-      console.log("ret:" + i + ":" + ret);
-      if (ret == null || ret.isNull()) {
-        sceneCount = i;
-        break
-      } else {
-        await wait(2000);
+    // var launcherScenes: string[] = Loader.getScenes(true) as string[];
+    let sceneIndicies = Loader.getScenes(false);
+    if (sceneIndicies) {
+      for (let i = 0; i < sceneIndicies.length; i++) {
+        await Loader.unloadScene("", sceneIndicies[i]);
       }
     }
 
-    Loader.restoreScenes(launcherScenes);
+    let instance = Classes.getInstance();
+    if (instance.SceneManager) {
+      let SceneManager = instance.SceneManager
+      var getSceneCount =
+          SceneManager.tryMethod("get_sceneCountInBuildSettings")
+      if (getSceneCount) {
+        var sceneCount = getSceneCount.executeStatic() as number;
+        return sceneCount;
+      }
+    }
+    var maxSceneCount = 50;
+    var sceneCount = 0;
+    var ret = null;
+    for (var i = 1; i < maxSceneCount; i++) {
+      ret = Loader.loadScene("", i, true);
+      console.log("ret:" + i + ":" + ret);
+      if (ret == null || ret.isNull()) {
+        break;
+      } else {
+        await wait(2000);
+      }
+      sceneCount = i;
+    }
+    console.log("Scene Count", sceneCount);
     return sceneCount;
   }
 
   public static async start() {
     console.log("Attatching...");
-    Loader.bypassSSLPinning();
-    console.log("Loading Il2Cpp...");
+    // Loader.bypassSSLPinning();
     return Il2Cpp.perform(() => {
-      console.log("Loaded Il2Cpp");
+      console.log("Performing Il2Cpp");
       try {
         console.log("Loaded Unity version: " + Il2Cpp.unityVersion);
         return Loader.init();
@@ -319,7 +351,7 @@ export class Loader {
         console.log(sse);
         console.error(u.stack);
       }
-    }, "free");
+    });
   }
 }
 
@@ -617,6 +649,8 @@ export class ClassLoader {
     let uClass = new UnityClass() as T;
     let result = uClass.resolve(img, className);
     if (result != null) {
+      // TODO: Support Generics class loading.
+      // In this iteration, we are going to avoid Generics.
       uClass.resolveMethods(
           (method: UnityMethod<Il2Cpp.Method.ReturnType>): boolean => {
             return !method.methodName.includes("System.Collections.Generic");
@@ -838,18 +872,14 @@ export class ClassLoader {
     if (classes.Message == null) {
       classes.Message = ClassLoader.resolveClass<UnityClass>(
           img, "Oculus.Platform.Message", true);
-      // APIHooker.hookEntitlementCheck();
     }
     if (classes.CAPI == null) {
       classes.CAPI = ClassLoader.resolveClass<UnityClass>(
           img, "Oculus.Platform.CAPI", true);
-      APIHooker.hookEntitlementCheck_alt();
-      // APIHooker.hookEntitlementCheck();
     }
     if (classes.Entitlements == null) {
       classes.Entitlements = ClassLoader.resolveClass<UnityClass>(
           img, "Oculus.Platform.Entitlements", true);
-      // APIHooker.hookEntitlementCheck();
     }
 
     if (classes.OVRBody == null) {

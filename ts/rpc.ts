@@ -182,6 +182,16 @@ export class RPC {
     return Loader.loadSceneEvents(scene_index);
   }
 
+  static loadScene(scene_index: number) {
+    RPC.healthCheckCount = 0;
+    return Loader.loadScene("", scene_index, true);
+  }
+
+  static unloadScene(scene_index: number) {
+    RPC.healthCheckCount = 0;
+    return Loader.unloadScene("", scene_index);
+  }
+
   static async triggerEvent(payload: string) {
     RPC.healthCheckCount = 0;
     let event: Event = JSON.parse(payload);

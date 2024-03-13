@@ -76,6 +76,20 @@ export class Util {
     return builder.buildAndClear();
   }
 
+  static async runOnAllThreads(block: () => any) {
+    let allThreads = Il2Cpp.attachedThreads;
+    for (let thread of allThreads) {
+      try {
+        await thread.schedule(() => {
+          block();
+          console.log("passed, on thread", thread.id);
+        });
+      } catch (err: any) {
+        console.log(thread.id, "throws err");
+      }
+    }
+  }
+
   static objectsOfClass(clazz: Il2Cpp.Class, objs: Il2Cpp.Object[]) {
     return objs.filter(obj => clazz.isAssignableFrom(obj.class));
   }
@@ -86,6 +100,9 @@ export class Util {
     if (classes.GameObject && classes.Object) {
       let GameObject = classes.GameObject!.rawImageClass;
       let Component = classes.Component!.rawImageClass;
+      // TODO: Memory map objects to their respective threads so that we can
+      // call functions on individual threads for each object, instead of brute
+      // forcing.
       return await Il2Cpp.perform<Array<Promise<Array<Il2Cpp.Object>>>>(() => {
         let threads: Il2Cpp.Thread[] =
             Il2Cpp.attachedThreads.filter(thread => thread && !thread.isNull())

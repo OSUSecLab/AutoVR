@@ -220,6 +220,21 @@ export class APIHooker {
     }
   }
 
+  public static hookEntitlementCheck_alt2() {
+    let instance = Classes.getInstance();
+    let uCAPI = instance.CAPI;
+    const USER_ENTITLEMENT = "ovr_Entitlement_GetIsViewerEntitled";
+    if (uCAPI && APIHooker.enableEntitlement) {
+      let CAPI = uCAPI.rawImageClass;
+      let ovrGetIsViewerEntitled = CAPI.method<void>(USER_ENTITLEMENT);
+      console.log("HOOKING");
+      ovrGetIsViewerEntitled.implementation = function() {
+        console.log(USER_ENTITLEMENT);
+        return
+      }
+    }
+  }
+
   public static hookEntitlementCheck_alt() {
     let instance = Classes.getInstance();
     let uCAPI = instance.CAPI;

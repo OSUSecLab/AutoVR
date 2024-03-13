@@ -7,6 +7,7 @@ import {ExecOptions} from "child_process";
 import {off} from "process";
 import {RPC} from './rpc';
 
+// Loader.start();
 rpc.exports = {
   checkHealth() { return RPC.checkHealth(); },
   getUnityVersion() { return RPC.getUnityVersion(); },
@@ -21,9 +22,10 @@ rpc.exports = {
   getAllMethods() { return RPC.getAllMethods(); },
   countAllScenes() { return RPC.countAllScenes(); },
   loadSceneEvents(scene_index) { return RPC.loadSceneEvents(scene_index); },
+  loadScene(scene_index) { return RPC.loadScene(scene_index); },
+  unloadScene(scene_index) { return RPC.unloadScene(scene_index); },
   triggerEvent(payload) { return RPC.triggerEvent(payload); },
   triggerAllEvents(payload) { return RPC.triggerAllEvents(payload); },
   test() { console.log("TEST CALLED"); },
   dispose : function() {}
 };
-// Loader.start();

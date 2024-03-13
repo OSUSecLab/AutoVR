@@ -55,8 +55,14 @@ class RPC:
     def resolve_symbols(self, symbols):
         return self.exports_sync.resolve_symbols(json.dumps(symbols))
 
+    def load_scene(self, scene_index):
+        return self.exports_sync.load_scene(scene_index)
+
     def load_scene_events(self, scene_index):
         return self.exports_sync.load_scene_events(scene_index)
+
+    def unload_scene(self, scene_index):
+        return self.exports_sync.unload_scene(scene_index)
 
     async def trigger_event(self, event):
         return await self.exports_async.trigger_event(json.dumps(event))

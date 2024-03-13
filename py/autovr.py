@@ -5,28 +5,36 @@ import subprocess
 import asyncio
 import threading
 import argparse
+from dataclasses import dataclass
 from run import *
 from run_bypass_all_ssl_pinnings import *
+
+
+@dataclass
+class Status:
+    tries: int
+    should_cont: bool
+
 
 stop_event = threading.Event()
 
 
-def run_async(script, device, pid, tries, script_file, host, states):
+def run_async(script, device, pid, tries, script_file, host, states,
+              delay_scenes):
 
     setup_base(script, device, pid, script_file)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
+    # Possibly error prone here, if count_scenes() fails.
     if states["num_scenes"] == -1:
-        print("Counting scenes")
         states["num_scenes"] = count_scenes()
 
-    print("Running", host)
-    device.resume(pid)
-    loop.run_until_complete(run(script, host, states))
+    loop.run_until_complete(run(script, host, states, delay_scenes))
     loop.close()
-    print("FINISHED", host)
+    print("FINISHED returning", host)
+    return
 
 
 def check_frida_ps_async(event, device_name):
@@ -81,35 +89,37 @@ async def extract_crash_logs(device_name, dir_name, base_directory):
                                               stderr=subprocess.STDOUT)
 
 
-async def main(device_name, package_name, script_file, ssl_offset,
-               use_mbed_tls, is_rooted):
-
-    # Run the command: adb shell pm list packages <dir_name>
+def does_contain_package(device_name, package_name):
     command = [
         'adb', '-s', device_name, 'shell', 'pm', 'list', 'packages',
         package_name
     ]
     output = subprocess.check_output(command).decode('utf-8')
-    if not output or output == '':
+    return output and not output == ''
+
+
+async def main(device_name, package_name, script_file, ssl_offset,
+               use_mbed_tls, delay_scenes, is_rooted):
+
+    if not does_contain_package(device_name, package_name):
         print(f"{device_name} does not have package {package_name}")
         return
-
+    delay_scenes = int(delay_scenes)
     pid = None
     try:
         # Housekeeping
         curr_scene = -1
         last_scene = -1
-        tries = 0
-        should_cont = True
+        status = Status(0, True)
         states = {"curr_scene": 0, "num_scenes": -1}
 
-        while should_cont:
+        while status.should_cont:
             print("Starting")
             setup_crash_logs(device_name)
 
             script, device, pid = setup(device_name, package_name, ssl_offset,
-                                        use_mbed_tls)
-
+                                        use_mbed_tls, is_rooted)
+            print("Done setup")
             if script is None and device is None and pid is None:
                 print(
                     "Frida not properly setup, ensure Frida is running on the device."
@@ -119,45 +129,46 @@ async def main(device_name, package_name, script_file, ssl_offset,
             event = threading.Event()
             # Submit the functions to the executor
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
             # Health checking
             check_future = executor.submit(check_frida_ps_async, event,
                                            device_name)
 
-            run_future = executor.submit(run_async, script, device, pid, tries,
-                                         script_file, package_name, states)
+            run_future = executor.submit(run_async, script, device, pid,
+                                         status.tries, script_file,
+                                         package_name, states, delay_scenes)
 
             # Wait until the first function is done
             for future in concurrent.futures.as_completed(
                 [run_future, check_future]):
-
+                print("CURRENT SCENE", states["curr_scene"])
+                print(future)
                 # If frida process is lost (a crash)
                 if future is check_future:
                     # Restart to scene
                     print("Crash occurs, restarting...")
-                    if tries > 2:
+                    if status.tries > 2:
                         print("Too many crash tries, exiting", package_name)
-                        should_cont = False
+                        status.should_cont = False
                         break
                     curr_scene = states["curr_scene"]
                     if last_scene == curr_scene:
-                        tries += 1
-                        print("Scene", curr_scene, "attempt", tries)
+                        status.tries += 1
+                        print("Scene", curr_scene, "attempt", status.tries)
                     else:
-                        tries = 0
+                        status.tries = 0
                         last_scene = curr_scene
                     break
                 # Scene successfully finished
                 elif future is run_future:
-                    should_cont = False
+                    status.should_cont = False
                     print("Success")
+                    print("AutoVR finished executing, shutting down...")
+                    event.set()
+                    # Shutdown the executor
                     break
 
-                print("CURRENT SCENE", states["curr_scene"])
-
-            event.set()
-            # Shutdown the executor
             executor.shutdown(wait=False)
-
             # Get crash logs
             #print("Getting crash logs")
             #await extract_crash_logs(device_name, package_name, "/tmp/")
@@ -165,8 +176,9 @@ async def main(device_name, package_name, script_file, ssl_offset,
     except Exception as e:
         print("autovr Error:", e)
 
-    frida_kill(device_name, pid, is_rooted)
+    frida_kill(package_name, device_name, is_rooted)
     time.sleep(3)
+    print("Done")
 
 
 parser = argparse.ArgumentParser(description='Run AutOVR on a single package.')
@@ -205,6 +217,14 @@ parser.add_argument(
     default=True,
     required=False,
     help='If the SSL offset is using mbed TLS function, set this to true.')
+parser.add_argument(
+    '--delay_scenes',
+    metavar='delay_scenes',
+    type=str,
+    default='3',
+    required=False,
+    help=
+    'The amount of delay (seconds) between scene loading and event parsing.')
 parser.add_argument('--rooted',
                     metavar='is_rooted',
                     type=bool,
@@ -214,4 +234,4 @@ parser.add_argument('--rooted',
 args = parser.parse_args()
 asyncio.run(
     main(args.device, args.package, args.script_file, args.ssl_offset,
-         args.use_mbed_tls, args.rooted))
+         args.use_mbed_tls, args.delay_scenes, args.rooted))

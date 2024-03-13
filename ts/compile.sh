@@ -1,2 +1,2 @@
-./node_modules/frida-compile/bin/compile.js index.ts -o index.out.js -w
+./node_modules/frida-compile/bin/compile.js index.ts -o ../index.out.js -w
 

@@ -311,7 +311,6 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
   executeStatic(...args: any): ReturnType {
     assert(this.initialized);
     assert(this.methodSignature != null);
-    console.log("Executing")
     return this.methodSignature.invoke(...args);
   }
 

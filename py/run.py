@@ -268,10 +268,44 @@ def init(curr_scene):
     _ui_events[curr_scene] = []
 
 
-def frida_kill(device_name, pid=0, rooted=False):
+def _process_pids(pids):
+    final = dict()
+    for pid in pids:
+        pid_entry = pid.lstrip().rstrip()  # remove trailing whitespace
+        if pid_entry != '':
+            process_id, name = pid_entry.split('  ', 1)
+            final[name] = process_id
+    return final
+
+
+def frida_ps_list(device_name):
+    command = ['frida-ps', '-D', device_name]
+    process = subprocess.Popen(command,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    out, err = process.communicate()
+    pids = out.decode("utf-8").split("\n")[2:]
+    pids = _process_pids(pids)
+    return pids
+
+
+def find_package_pid(package, device_name, rooted=False):
+    if not rooted:
+        print("Device not rooted, using re.frida.Gadget instead.")
+        package = "re.frida.Gadget"
+    pids = frida_ps_list(device_name)
+    if package in list(pids.keys()):
+        return int(pids[package])
+    return -1
+
+
+def frida_kill(host, device_name, rooted=False):
+    pid = find_package_pid(host, device_name, rooted)
     command = ['frida-kill', '-D', device_name, 'Gadget']
-    if rooted:
+    if rooted and pid != -1:
         command = ['frida-kill', '-D', device_name, f"{pid}"]
+    elif pid == -1:
+        return
     process = subprocess.Popen(command)
     try:
         process.wait(3)
@@ -313,20 +347,23 @@ async def main():
     await run(host, file, num_scenes, 0)
 
 
-def setup(device_name, host, ssl_offset='', use_mbed_tls=True):
-    #frida_kill(device_name)
+def setup(device_name,
+          host,
+          ssl_offset='',
+          use_mbed_tls=True,
+          is_rooted=False):
 
-    if not spawn_package(device_name, host):
-        return (None, None, None)
+    frida_kill(host, device_name, is_rooted)
 
-    gadget = "re.frida.Gadget"
-
+    #if not spawn_package(device_name, host):
+    #    return (None, None, None)
+    #gadget = "re.frida.Gadget"
     device = frida.get_device(device_name)
+    pid = device.spawn([host])  # 're.frida.Gadget' if running gadget
+    #pid = device.get_frontmost_application(scope="full").pid
 
-    #pid = device.spawn([gadget])  # 're.frida.Gadget' if running gadget
-    pid = device.get_frontmost_application(scope="full").pid
-    session = device.attach(pid, persist_timeout=30)
-    script = session.create_script(open("index.out.js").read())
+    session = device.attach(pid)
+    script = session.create_script(open("../index.out.js").read())
 
     protocol.set_export_sync(script.exports_sync)
     protocol.set_export_async(script.exports_async)
@@ -348,13 +385,14 @@ def setup_ssl_pin_offset(script, offset, use_mbed_tls):
 
 
 def setup_base(script, device, pid, file):
-    if file != '' and os.path.exists(file):
+    if file and file != '' and os.path.exists(file):
         f = open(file, "r")
         on = json.loads(f.read())
         script.post({'type': 'input', 'payload': json.dumps(on)})
     else:
         script.post({'type': 'input', 'payload': ''})
 
+    device.resume(pid)
     res = protocol.init()
     res = json.loads(res)
     base = res["base"]
@@ -366,7 +404,7 @@ def get_unity_version():
 
 
 def count_scenes(tries=3):
-    # Ensure setup() was called beforehand
+    # Ensure setup_base() was called beforehand
     print("COUNTING SCENES")
     count = 0
     while count < tries:
@@ -378,9 +416,48 @@ def count_scenes(tries=3):
     return num_scenes
 
 
-async def run(script, host, states):
-    global _resolved_deps
+async def start(curr_scene, start_time, states, delay_scenes):
+    try:
+        states["curr_scene"] = curr_scene
+        init(curr_scene)
 
+        # Delay so all objects can load once the scene is loaded.
+        time.sleep(delay_scenes)
+
+        protocol.load_scene(curr_scene)
+        if curr_scene != 0: protocol.unload_scene(curr_scene - 1)
+        init_events = protocol.load_scene_events(curr_scene)
+
+        (events_trigger, inital_branch_count) = analyze_events(init_events)
+        print(events_trigger)
+        (all_events, next_branch_count) = await trigger_events(events_trigger)
+        print("FINISH SCENE")
+
+        _scene_events[curr_scene] = all_events
+        end_time = time.time()
+        branch_count = inital_branch_count + next_branch_count
+
+        #print_results(host, curr_scene, branch_count,
+        #              end_time - start_time)
+
+        print("Time taken:", end_time - start_time)
+        print("Scene: ", curr_scene, " | ", "Objects:",
+              _objects_scene[curr_scene])
+        if curr_scene in _per_event:
+            print("Events: ", _per_event[curr_scene])
+        if curr_scene in _collisions:
+            print("Collisions:", _collisions[curr_scene])
+        if curr_scene in _triggers:
+            print("Triggers:", _triggers[curr_scene])
+        print("Branches:", branch_count)
+        return True
+    except Exception as err:
+        print(err)
+        return False
+
+
+async def run(script, host, states, delay_scenes):
+    global _resolved_deps
     num_scenes = states["num_scenes"]
     start_scene = states["curr_scene"]
 
@@ -390,35 +467,11 @@ async def run(script, host, states):
 
     print("NUMBER OF SCENES:", num_scenes)
     for curr_scene in range(start_scene, num_scenes):
-        try:
-            states["curr_scene"] = curr_scene
-            init(curr_scene)
-            init_events = protocol.load_scene_events(curr_scene)
-            (events_trigger, inital_branch_count) = analyze_events(init_events)
-            print(events_trigger)
-            (all_events,
-             next_branch_count) = await trigger_events(events_trigger)
-            print("FINISH SCENE")
-            _scene_events[curr_scene] = all_events
-            end_time = time.time()
-            branch_count = inital_branch_count + next_branch_count
-
-            #print_results(host, curr_scene, branch_count,
-            #              end_time - start_time)
-
-            print("Time taken:", end_time - start_time)
-            print("Scene: ", curr_scene, " | ", "Objects:",
-                  _objects_scene[curr_scene])
-            if curr_scene in _per_event:
-                print("Events: ", _per_event[curr_scene])
-            if curr_scene in _collisions:
-                print("Collisions:", _collisions[curr_scene])
-            if curr_scene in _triggers:
-                print("Triggers:", _triggers[curr_scene])
-            print("Branches:", branch_count)
-        except Exception as err:
-            print(err)
+        print(curr_scene)
+        if not (await start(curr_scene, start_time, states, delay_scenes)):
             continue
+        states["curr_scene"] = curr_scene
+    #await start(0, start_time, states, delay_scenes)
 
 
 # if wanted to run standalone.
