@@ -38,7 +38,7 @@ Ensure Frida server binary is running on the device.
 | device       | Device ID connected using ```adb devices```                                                                                       | Y         |
 | package      | Name of the target package.                                                                                                       | Y         |
 | script-file  | The ```script.json``` file from Il2CppDumper [[here][2]].                                                                         | N         |
-| ssl-offset   | For network: If SSL bypass is needed, this is the hexadecimal offset value of the Unity SSL pinning function. See details below.  | N         |
+| ssl-offset   | For network: If SSL bypass is needed, this is the hexadecimal offset value of the Unity SSL pinning function.                     | N         |
 | use-mbed-tls | For network: If ```mbedtls_x509_crt_verify_with_profile``` SSL pinning function is used.                                          | N         |
 | delay_scenes | Seconds between scene loads to wait before event loading starts.                                                                  | N         |
 | rooted       | If the device is rooted and frida-server-arm64 is running on the device.                                                          | N         |
