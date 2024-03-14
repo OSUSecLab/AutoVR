@@ -6,8 +6,8 @@ import asyncio
 import threading
 import argparse
 from dataclasses import dataclass
-from run import *
-from run_bypass_all_ssl_pinnings import *
+from py.run import *
+from py.run_bypass_all_ssl_pinnings import *
 
 
 @dataclass
@@ -130,13 +130,13 @@ async def main(device_name, package_name, script_file, ssl_offset,
             # Submit the functions to the executor
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
-            # Health checking
-            check_future = executor.submit(check_frida_ps_async, event,
-                                           device_name)
-
             run_future = executor.submit(run_async, script, device, pid,
                                          status.tries, script_file,
                                          package_name, states, delay_scenes)
+
+            # Health checking
+            check_future = executor.submit(check_frida_ps_async, event,
+                                           device_name)
 
             # Wait until the first function is done
             for future in concurrent.futures.as_completed(
