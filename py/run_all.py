@@ -5,8 +5,8 @@ import subprocess
 import asyncio
 import threading
 import argparse
-from run import *
-from run_bypass_all_ssl_pinnings import *
+from .run import *
+from .run_bypass_all_ssl_pinnings import *
 
 results_directory = '../results/pcaps/test'
 root = '/Volumes/'

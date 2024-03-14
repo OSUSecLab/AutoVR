@@ -4,15 +4,13 @@ import traceback
 import time
 import sys
 import json
-import rpc
 import multiprocessing
 import subprocess
-from mi_builder import *
-from cfg_payload import PayloadBuilder
 import asyncio
+from .rpc import *
 from threading import *
 
-protocol = rpc.RPC()
+protocol = RPC()
 target_methods = ["LoadSceneAsync"]
 blacklist = ["Object", "IntPtr", "StringBuilder", "String", "Number"]
 
@@ -363,7 +361,7 @@ def setup(device_name,
     #pid = device.get_frontmost_application(scope="full").pid
 
     session = device.attach(pid)
-    script = session.create_script(open("../index.out.js").read())
+    script = session.create_script(open("index.out.js").read())
 
     protocol.set_export_sync(script.exports_sync)
     protocol.set_export_async(script.exports_async)
@@ -462,8 +460,8 @@ async def run(script, host, states, delay_scenes):
     start_scene = states["curr_scene"]
 
     start_time = time.time()
-    ins_feeder = InstructionFeeder.get_instance()
-    ins_feeder.add_rpc(protocol)
+    #ins_feeder = InstructionFeeder.get_instance()
+    #ins_feeder.add_rpc(protocol)
 
     print("NUMBER OF SCENES:", num_scenes)
     for curr_scene in range(start_scene, num_scenes):
