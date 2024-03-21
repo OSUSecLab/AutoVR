@@ -1,2 +1,2 @@
-./node_modules/*
-./index.out.js
+ts/node_modules/
+index.out.js
