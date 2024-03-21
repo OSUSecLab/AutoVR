@@ -61,7 +61,8 @@ python3.11 autovr.py --device 1WMHHA69J92123 --package com.my.package \
 ```
 
 ## License
-TODO
+```AutoVR``` is licensed under the MIT License.
+
 
 [1]: https://github.com/frida/frida/releases
 [2]: https://github.com/Perfare/Il2CppDumper
