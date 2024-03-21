@@ -61,7 +61,7 @@ python3.11 autovr.py --device 1WMHHA69J92123 --package com.my.package \
 ```
 
 ## License
-```AutoVR``` is licensed under the MIT License.
+```AutoVR``` is licensed under the Apache 2.0 License.
 
 
 [1]: https://github.com/frida/frida/releases
