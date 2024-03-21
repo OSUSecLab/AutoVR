@@ -8,6 +8,7 @@ import multiprocessing
 import subprocess
 import asyncio
 from .rpc import *
+from .events import *
 from threading import *
 
 protocol = RPC()
@@ -35,10 +36,13 @@ branch_count = 0
 last_scene = 0
 
 
-def analyze_events(events):
+def analyze_events(events, parent_node, event_graph):
     branch_count = 0
     events_trigger = {}
     for event in events:
+        #event_node = EventNode(event, parent_node)
+        #print(event)
+        #event_graph.addCompletedEventNode(event_node)
         if event in _methods:
             # print("EVENT:", _methods[event])
             #node = CFGNode(protocol, _methods, _blacklist)
@@ -233,6 +237,56 @@ async def check_health(device_name):
         return False
 
 
+async def trigger_event(event, seq):
+    try:
+        async with asyncio.timeout(60):
+            next_events = await protocol.trigger_event({
+                "event": event,
+                "sequence": seq
+            })
+        return next_events
+    except asyncio.TimeoutError:
+        print("Timeout occurred, skipping")
+        return []
+
+
+async def trigger_events_path(starting_node, event_graph):
+    event_path = event_graph.findNextPath(starting_node)
+    sequence = []
+
+    if event_path is None:
+        return None
+    # remove starting_node from the event_path because we don't need to trigger it.
+    print("event_path:")
+    for node in event_path:
+        print(node.event_name, "->")
+    for event_node in event_path:
+        if event_node.triggered:
+            sequence.append(event_node.event_name)
+            continue
+
+        next_events = await trigger_event(event_node.event_name, sequence)
+        event_node.markTriggered()
+
+        print(next_events)
+        for next_event in next_events:
+            next_event_node = EventNode(next_event, event_node)
+            event_node.addChild(next_event_node)
+
+        event_graph.addCompletedEventNode(event_node)
+        if len(event_node.children) > 0:
+            apath = await trigger_events_path(event_node, event_graph)
+            print("apath:", apath)
+            for anode in apath:
+                print(anode.event_name, "->")
+
+        # event_node may now have visited all nodes, update.
+        event_node.updateVisited()
+        event_graph.addCompletedEventNode(event_node)
+
+    return event_path
+
+
 async def trigger_events(events_trigger):
     num_branches = 0
     triggered = list(events_trigger.keys())
@@ -422,18 +476,34 @@ async def start(curr_scene, start_time, states, delay_scenes):
         # Delay so all objects can load once the scene is loaded.
         time.sleep(delay_scenes)
 
-        protocol.load_scene(curr_scene)
+        await protocol.load_scene(curr_scene)
         if curr_scene != 0: protocol.unload_scene(curr_scene - 1)
         init_events = protocol.load_scene_events(curr_scene)
 
-        (events_trigger, inital_branch_count) = analyze_events(init_events)
+        event_graph = EventGraph(curr_scene, init_events)
+        (events_trigger,
+         inital_branch_count) = analyze_events(init_events,
+                                               event_graph.scene_node,
+                                               event_graph)
         print(events_trigger)
-        (all_events, next_branch_count) = await trigger_events(events_trigger)
+
+        print("event_graph", event_graph)
+        paths = await trigger_events_path(event_graph.scene_node, event_graph)
+        while paths is not None:
+            protocol.unload_scene(curr_scene)
+            await protocol.load_scene(curr_scene)
+            next_events = protocol.load_scene_events(curr_scene)
+            if len(next_events) < 1: break
+            paths = await trigger_events_path(event_graph.scene_node,
+                                              event_graph)
+
+        #(all_events, next_branch_count) = await trigger_events(events_trigger)
         print("FINISH SCENE")
 
-        _scene_events[curr_scene] = all_events
+        # TODO: replace init_events with paths events
+        _scene_events[curr_scene] = init_events
         end_time = time.time()
-        branch_count = inital_branch_count + next_branch_count
+        #branch_count = inital_branch_count + next_branch_count
 
         #print_results(host, curr_scene, branch_count,
         #              end_time - start_time)
@@ -447,7 +517,7 @@ async def start(curr_scene, start_time, states, delay_scenes):
             print("Collisions:", _collisions[curr_scene])
         if curr_scene in _triggers:
             print("Triggers:", _triggers[curr_scene])
-        print("Branches:", branch_count)
+        #print("Branches:", branch_count)
         return True
     except Exception as err:
         print(err)

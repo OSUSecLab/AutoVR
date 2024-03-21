@@ -212,7 +212,7 @@ export class Loader {
   public static async unloadScene(sceneName: string, index: number) {
     let instance = Classes.getInstance();
     console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
-    return Il2Cpp.mainThread.schedule(() => {
+    return await Il2Cpp.mainThread.schedule(() => {
       let sceneIndicies = Loader.getScenes(false);
       var sss = Il2Cpp.reference(false);
       let UnloadSceneOptions = instance.UnloadSceneOptions;
@@ -232,8 +232,8 @@ export class Loader {
     });
   }
 
-  public static loadScene(name: string, index: number,
-                          single: boolean): Il2Cpp.Object|null {
+  public static async loadScene(name: string, index: number,
+                                single: boolean): Promise<Il2Cpp.Object|null> {
     var ret = null;
     let instance = Classes.getInstance();
     if (instance.LoadSceneParameters && instance.LoadSceneMode &&
@@ -246,20 +246,24 @@ export class Loader {
               .value);
       // console.log("LoadSceneParameters_instance:" +
       //            LoadSceneParameters_instance);
-      let SceneManager = instance.SceneManager;
-      if (index == -1) {
-        console.log("LOAD SCENE");
-        ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
-                  .executeStatic(Il2Cpp.string(name), -1,
-                                 LoadSceneParameters_instance.unbox(), true) as
-              Il2Cpp.Object;
-      } else {
-        console.log("LOAD SCENE");
-        ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
-                  .executeStatic(Il2Cpp.string(""), index,
-                                 LoadSceneParameters_instance.unbox(), true) as
-              Il2Cpp.Object;
-      }
+      await Il2Cpp.perform(() => {
+        let SceneManager = instance.SceneManager;
+        if (SceneManager) {
+          if (index == -1) {
+            console.log("LOAD SCENE");
+            ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                      .executeStatic(Il2Cpp.string(name), -1,
+                                     LoadSceneParameters_instance.unbox(),
+                                     true) as Il2Cpp.Object;
+          } else {
+            console.log("LOAD SCENE");
+            ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                      .executeStatic(Il2Cpp.string(""), index,
+                                     LoadSceneParameters_instance.unbox(),
+                                     true) as Il2Cpp.Object;
+          }
+        }
+      });
     }
     return ret;
   }
@@ -304,12 +308,13 @@ export class Loader {
 
   public static async countAllScenes() {
     // var launcherScenes: string[] = Loader.getScenes(true) as string[];
+    /*
     let sceneIndicies = Loader.getScenes(false);
     if (sceneIndicies) {
       for (let i = 0; i < sceneIndicies.length; i++) {
         await Loader.unloadScene("", sceneIndicies[i]);
       }
-    }
+    }*/
 
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
@@ -325,7 +330,7 @@ export class Loader {
     var sceneCount = 0;
     var ret = null;
     for (var i = 1; i < maxSceneCount; i++) {
-      ret = Loader.loadScene("", i, true);
+      ret = await Loader.loadScene("", i, true);
       console.log("ret:" + i + ":" + ret);
       if (ret == null || ret.isNull()) {
         break;

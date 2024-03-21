@@ -168,27 +168,35 @@ export class RPC {
 
   static getAllMethods(): string {
     RPC.healthCheckCount = 0;
-    return JSON.stringify(
-        Array.from(AllMethods.getInstance().methods.entries()));
+    let allMethods =
+        JSON.stringify(Array.from(AllMethods.getInstance().methods.entries()));
+    console.log("getAllMethods:", allMethods);
+    return allMethods;
   }
 
   static async countAllScenes() {
     RPC.healthCheckCount = 0;
-    return Loader.countAllScenes();
+    let count = Loader.countAllScenes();
+    console.log("countAllScenes:", count);
+    return count;
   }
 
   static loadSceneEvents(scene_index: number) {
     RPC.healthCheckCount = 0;
-    return Loader.loadSceneEvents(scene_index);
+    let eventNames = Loader.loadSceneEvents(scene_index);
+    console.log("eventNames:", eventNames)
+    return eventNames;
   }
 
   static loadScene(scene_index: number) {
     RPC.healthCheckCount = 0;
+    console.log("loadScene:")
     return Loader.loadScene("", scene_index, true);
   }
 
   static unloadScene(scene_index: number) {
     RPC.healthCheckCount = 0;
+    console.log("unloadScene:")
     return Loader.unloadScene("", scene_index);
   }
 
@@ -198,7 +206,9 @@ export class RPC {
     if (event === undefined) {
       return;
     }
-    return await Loader.triggerEvent(event);
+    let nextEvents = await Loader.triggerEvent(event);
+    console.log("triggerEvent:", nextEvents);
+    return nextEvents;
   }
 
   static async triggerAllEvents(payload: string) {
@@ -206,11 +216,14 @@ export class RPC {
     let parse = JSON.parse(payload);
     const events = new Map<string, string[]>(Object.entries(parse));
     console.log("TRIGGER ALL", events);
-    return await Loader.triggerAllEvents(events);
+    let nextEvents = await Loader.triggerAllEvents(events);
+    console.log("triggerAllEvents:", nextEvents);
+    return nextEvents;
   }
 
   static init() {
     RPC.healthCheckCount = 0;
+    console.log("init:");
     return Loader.start();
   }
 }

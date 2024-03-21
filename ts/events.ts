@@ -769,11 +769,15 @@ export class EventTriggerer {
   }
 
   private async loadNextEvents() {
+    const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
+    const resolvedObjects = ResolvedObjects.getInstance();
+
     // Get all events loaded but ignore already triggered events.
     return this.loader
         .getEventFunctionCallbacks(await Util.getAllActiveObjects())
-        .filter((event) => !triggeredEvents.contains(event));
+        .filter((event) => !triggeredEvents.contains(event) &&
+                           instance.contains(event));
   }
 
   public sendTriggeredEvents() {
@@ -798,17 +802,22 @@ export class EventTriggerer {
 
     let name =
         instance.contains(event) ? instance.getMethodName(event)! : event;
+    console.log("TRIGGERINGG", name);
     if (instance.contains(event)) {
       const emHandle = instance.methods.get(event);
       const emMethod = new Il2Cpp.Method(new NativePointer(emHandle!));
       const emClass = emMethod.class;
       const eObjs: UnityObject[] = resolvedObjects.objectsOfClass(emClass);
 
+      await this.triggerEventsOfObjs(emMethod, eObjs);
+      /*
       if (sequence.length < 1) {
         await this.triggerEventsOfObjs(emMethod, eObjs);
       } else {
+        // TODO: Support invoke sequence method to take just the method name in
+        // stead of handle and obj
         await this.invokeSequenceMethod(emMethod, eObjs, sequence);
-      }
+      }*/
       // Wait between event groups to avoid breaking
       await wait(TIME_BETWEEN_EVENTS);
     }
