@@ -103,7 +103,7 @@ export class Loader {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
     // To see exceptions:
-    Il2Cpp.installExceptionListener("all");
+    // Il2Cpp.installExceptionListener("all");
 
     Loader.bypassEntitlements();
     Loader.resolveSymbols();
@@ -121,8 +121,10 @@ export class Loader {
     return JSON.stringify(obj);
   }
 
-  public static async loadSceneEvents(scene_index: number) {
+  public static async loadSceneEvents(scene_index: number,
+                                      delay_scenes_ms: number = 5000) {
     let instance = Classes.getInstance();
+    console.log("loadSceneEvents")
     if (instance.SceneManager) {
       var Method_LoadSceneAsyncNameIndexInternal =
           instance.SceneManager.method("LoadSceneAsyncNameIndexInternal");
@@ -140,18 +142,20 @@ export class Loader {
         };
         curr_event = '';
         curr_scene = scene_index;
-        // Loader.loadScene("", scene_index, true);
+        Loader.loadScene("", scene_index, true);
       });
       let scene = await promise;
-      console.log(scene, scene.length);
+      Method_LoadSceneAsyncNameIndexInternal.revert();
+      // console.log(scene, scene.length);
       Loader.revertSceneChange();
 
       // let objects = Il2Cpp.MemorySnapshot.capture().objects;
       // APIHooker.hookVRTrackingAPI(curr_scene, objects);
 
       // Wait for Update() calls on all gameobjects
-      await wait(5000);
+      await wait(delay_scenes_ms);
       let currentObjects = await Util.getAllActiveObjects();
+      ResolvedObjects.getInstance().clear()
       ResolvedObjects.getInstance().addComps(currentObjects);
       let res = {
         "type" : "objects_per_scene",
@@ -220,6 +224,9 @@ export class Loader {
       if (sceneIndicies && sceneIndicies.includes(index) &&
           UnloadSceneOptions && SceneManager) {
         console.log("UNLOAD SCENE", index);
+        let sceneObject =
+            SceneManager.method("GetSceneAt").executeStatic(index) as
+            Il2Cpp.Object;
         SceneManager.method("UnloadSceneNameIndexInternal")
             .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""), index,
                            true,
@@ -234,7 +241,6 @@ export class Loader {
 
   public static async loadScene(name: string, index: number,
                                 single: boolean): Promise<Il2Cpp.Object|null> {
-    var ret = null;
     let instance = Classes.getInstance();
     if (instance.LoadSceneParameters && instance.LoadSceneMode &&
         instance.AsyncOperation && instance.SceneManager) {
@@ -246,7 +252,10 @@ export class Loader {
               .value);
       // console.log("LoadSceneParameters_instance:" +
       //            LoadSceneParameters_instance);
-      await Il2Cpp.perform(() => {
+
+      console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
+      return Il2Cpp.mainThread.schedule(() => {
+        var ret = null;
         let SceneManager = instance.SceneManager;
         if (SceneManager) {
           if (index == -1) {
@@ -257,15 +266,19 @@ export class Loader {
                                      true) as Il2Cpp.Object;
           } else {
             console.log("LOAD SCENE");
-            ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
-                      .executeStatic(Il2Cpp.string(""), index,
-                                     LoadSceneParameters_instance.unbox(),
-                                     true) as Il2Cpp.Object;
+            ret =
+                SceneManager.method("LoadScene")
+                    .overload("System.Int32",
+                              "UnityEngine.SceneManagement.LoadSceneParameters")
+                    .executeStatic(index,
+                                   LoadSceneParameters_instance.unbox()) as
+                Il2Cpp.Object;
           }
         }
+        return ret;
       });
     }
-    return ret;
+    return null;
   }
 
   public static async restoreScenes(names: string[]) {

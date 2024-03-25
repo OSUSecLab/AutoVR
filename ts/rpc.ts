@@ -181,9 +181,9 @@ export class RPC {
     return count;
   }
 
-  static loadSceneEvents(scene_index: number) {
+  static loadSceneEvents(scene_index: number, delay_scenes_ms: number = 5000) {
     RPC.healthCheckCount = 0;
-    let eventNames = Loader.loadSceneEvents(scene_index);
+    let eventNames = Loader.loadSceneEvents(scene_index, delay_scenes_ms);
     console.log("eventNames:", eventNames)
     return eventNames;
   }

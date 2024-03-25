@@ -58,8 +58,8 @@ class RPC:
     async def load_scene(self, scene_index):
         return await self.exports_async.load_scene(scene_index)
 
-    def load_scene_events(self, scene_index):
-        return self.exports_sync.load_scene_events(scene_index)
+    def load_scene_events(self, scene_index, delay_scenes):
+        return self.exports_sync.load_scene_events(scene_index, delay_scenes)
 
     def unload_scene(self, scene_index):
         return self.exports_sync.unload_scene(scene_index)

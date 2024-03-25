@@ -55,8 +55,7 @@ export class EventLoader {
   curr_scene!: number;
   visited: Set<string> = new Set<string>;
   loadedEvents: Map<string, Il2Cpp.Object> = new Map<string, Il2Cpp.Object>;
-  efcs: Map<string, Array<Il2Cpp.Object>> =
-      new Map<string, Array<Il2Cpp.Object>>;
+  efcs: Map<string, Set<Il2Cpp.Object>> = new Map<string, Set<Il2Cpp.Object>>;
 
   constructor(scene_index: number) {
     this.curr_scene = scene_index;
@@ -340,9 +339,9 @@ export class EventLoader {
               call_count++;
               addrs.push(val.toString());
               if (!this.efcs.has(val.toString())) {
-                this.efcs.set(val.toString(), []);
+                this.efcs.set(val.toString(), new Set());
               }
-              this.efcs.get(val.toString())!.push(event);
+              this.efcs.get(val.toString())!.add(event);
               // console.log(val.toString());
               // console.log(
               //     AllMethods.getInstance().methods.get(val.toString()));
@@ -755,11 +754,9 @@ export class EventTriggerer {
           console.log("TRIGGERABLES", triggerables);
           await promiseTimeout(
               20000, this.triggerCollider(method, unboxed, triggerables));
-          break;
         } else if (isCollisionEvent) {
           await promiseTimeout(
               20000, this.triggerCollision(method, unboxed, colliders));
-          break;
         }
         await wait(TIME_BETWEEN_PHYSICS);
       } catch (e) {
@@ -771,7 +768,6 @@ export class EventTriggerer {
   private async loadNextEvents() {
     const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
-    const resolvedObjects = ResolvedObjects.getInstance();
 
     // Get all events loaded but ignore already triggered events.
     return this.loader
@@ -791,6 +787,29 @@ export class EventTriggerer {
     triggeredEvents.clear();
   }
 
+  public async _triggerEvent(eventAddress: string) {
+    const instance = AllMethods.getInstance();
+    const triggeredEvents = TriggeredEvents.getInstance();
+    const resolvedObjects = ResolvedObjects.getInstance();
+    const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
+    let name =
+        instance.contains(eventAddress) ? instance.getMethodName(eventAddress)! : eventAddress;
+    if (!triggeredEvents.contains(name)) {
+      triggeredEvents.addEvent(name);
+    }
+    if (instance.contains(eventAddress)) {
+      const emHandle = instance.methods.get(eventAddress);
+      const emMethod = new Il2Cpp.Method(new NativePointer(emHandle!));
+      const emClass = emMethod.class;
+      const eObjs: UnityObject[] = resolvedObjects.objectsOfClass(emClass);
+
+      await this.triggerEventsOfObjs(emMethod, eObjs);
+      // Wait between events avoid breaking
+      await wait(TIME_BETWEEN_EVENTS);
+    }
+    return await this.loadNextEvents();
+  }
+
   public async triggerEvent(eventObj: Event) {
     const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
@@ -800,28 +819,15 @@ export class EventTriggerer {
     let event = eventObj.event;
     let sequence = eventObj.sequence;
 
-    let name =
-        instance.contains(event) ? instance.getMethodName(event)! : event;
-    console.log("TRIGGERINGG", name);
-    if (instance.contains(event)) {
-      const emHandle = instance.methods.get(event);
-      const emMethod = new Il2Cpp.Method(new NativePointer(emHandle!));
-      const emClass = emMethod.class;
-      const eObjs: UnityObject[] = resolvedObjects.objectsOfClass(emClass);
-
-      await this.triggerEventsOfObjs(emMethod, eObjs);
-      /*
-      if (sequence.length < 1) {
-        await this.triggerEventsOfObjs(emMethod, eObjs);
-      } else {
-        // TODO: Support invoke sequence method to take just the method name in
-        // stead of handle and obj
-        await this.invokeSequenceMethod(emMethod, eObjs, sequence);
-      }*/
-      // Wait between event groups to avoid breaking
-      await wait(TIME_BETWEEN_EVENTS);
+    console.log("SEQ", sequence.length);
+    for (var i = 0; i < sequence.length; i++) {
+      let seqEventAddr = sequence[i];
+      // Skip synthetic scene event nodes.
+      if (!seqEventAddr.startsWith("scene:")) {
+        this._triggerEvent(seqEventAddr);
+      }
     }
-    return await this.loadNextEvents();
+    return await this._triggerEvent(event);
   }
 
   // Event Addr -> [methods to trigger]

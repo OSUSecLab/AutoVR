@@ -182,7 +182,7 @@ def parse_instructions(ins, count):
     return method_instructions
 
 
-def print_results(package, scene, branches, time):
+def print_results(package, scene, time):
     dicts = {
         "leaks": _leaks[scene],
         "collisions": _collisions[scene],
@@ -197,16 +197,12 @@ def print_results(package, scene, branches, time):
     # Loop through the dictionaries and write each one to a separate file
     for name, dictionary in dicts.items():
         # Open a new file with a filename based on the dictionary name
-        with open(f"../data/{package}_{name}_{scene}.json", "w") as f:
+        with open(f'../data/{package}_{name}_{scene}.json', "w") as f:
             # Use the json.dump method to write the dictionary to the file in JSON format
             json.dump(dictionary, f)
     with open(f"../data/{package}_resolved_{scene}.json", "w") as f:
         # use the json.dump method to write the dictionary to the file in json format
         json.dump(_resolved_deps, f)
-
-    with open(f"../data/{package}_branches_{scene}.json", "w") as f:
-        # use the json.dump method to write the dictionary to the file in json format
-        json.dump(branches, f)
     with open(f"../data/{package}_time_{scene}.json", "w") as f:
         # use the json.dump method to write the dictionary to the file in json format
         json.dump(str(time), f)
@@ -251,6 +247,7 @@ async def trigger_event(event, seq):
 
 
 async def trigger_events_path(starting_node, event_graph):
+    total_paths = []
     event_path = event_graph.findNextPath(starting_node)
     sequence = []
 
@@ -259,7 +256,8 @@ async def trigger_events_path(starting_node, event_graph):
     # remove starting_node from the event_path because we don't need to trigger it.
     print("event_path:")
     for node in event_path:
-        print(node.event_name, "->")
+        print(node.event_name, end=' ')
+    print('\n')
     for event_node in event_path:
         if event_node.triggered:
             sequence.append(event_node.event_name)
@@ -276,15 +274,14 @@ async def trigger_events_path(starting_node, event_graph):
         event_graph.addCompletedEventNode(event_node)
         if len(event_node.children) > 0:
             apath = await trigger_events_path(event_node, event_graph)
-            print("apath:", apath)
-            for anode in apath:
-                print(anode.event_name, "->")
+            total_paths += apath
 
         # event_node may now have visited all nodes, update.
         event_node.updateVisited()
         event_graph.addCompletedEventNode(event_node)
 
-    return event_path
+    total_paths += event_path
+    return total_paths
 
 
 async def trigger_events(events_trigger):
@@ -386,19 +383,6 @@ def spawn_package(device_name, package):
     return True
 
 
-async def main():
-    n = len(sys.argv)
-    if n != 3:
-        print("Usage: python3 run.py <host package> <script.json>")
-        exit()
-    host = sys.argv[1]
-    file = sys.argv[2]
-    print(host)
-    print(file)
-    num_scenes = await count_scenes()
-    await run(host, file, num_scenes, 0)
-
-
 def setup(device_name,
           host,
           ssl_offset='',
@@ -474,11 +458,10 @@ async def start(curr_scene, start_time, states, delay_scenes):
         init(curr_scene)
 
         # Delay so all objects can load once the scene is loaded.
-        time.sleep(delay_scenes)
+        # time.sleep(delay_scenes)
+        init_events = protocol.load_scene_events(curr_scene, delay_scenes)
 
-        await protocol.load_scene(curr_scene)
-        if curr_scene != 0: protocol.unload_scene(curr_scene - 1)
-        init_events = protocol.load_scene_events(curr_scene)
+        all_events = set()
 
         event_graph = EventGraph(curr_scene, init_events)
         (events_trigger,
@@ -489,47 +472,47 @@ async def start(curr_scene, start_time, states, delay_scenes):
 
         print("event_graph", event_graph)
         paths = await trigger_events_path(event_graph.scene_node, event_graph)
+        all_events |= set(paths)
         while paths is not None:
-            protocol.unload_scene(curr_scene)
-            await protocol.load_scene(curr_scene)
-            next_events = protocol.load_scene_events(curr_scene)
+            next_events = protocol.load_scene_events(curr_scene, delay_scenes)
             if len(next_events) < 1: break
             paths = await trigger_events_path(event_graph.scene_node,
                                               event_graph)
+            if paths is not None:
+                all_events |= set(paths)
 
-        #(all_events, next_branch_count) = await trigger_events(events_trigger)
         print("FINISH SCENE")
 
-        # TODO: replace init_events with paths events
-        _scene_events[curr_scene] = init_events
-        end_time = time.time()
-        #branch_count = inital_branch_count + next_branch_count
-
-        #print_results(host, curr_scene, branch_count,
-        #              end_time - start_time)
-
-        print("Time taken:", end_time - start_time)
-        print("Scene: ", curr_scene, " | ", "Objects:",
-              _objects_scene[curr_scene])
-        if curr_scene in _per_event:
-            print("Events: ", _per_event[curr_scene])
-        if curr_scene in _collisions:
-            print("Collisions:", _collisions[curr_scene])
-        if curr_scene in _triggers:
-            print("Triggers:", _triggers[curr_scene])
-        #print("Branches:", branch_count)
+        # Collect metrics of paths invoked
+        _scene_events[curr_scene] = all_events
         return True
     except Exception as err:
-        print(err)
+        print("run.py:", err)
         return False
 
 
-async def run(script, host, states, delay_scenes):
+def collect_metrics(package_name, start_time, curr_scene):
+    end_time = time.time()
+    print_results(package_name, curr_scene, end_time - start_time)
+
+    print("Time taken:", end_time - start_time)
+    print("Scene: ", curr_scene, " | ", "Objects:", _objects_scene[curr_scene])
+    if curr_scene in _per_event:
+        print("Events: ", _per_event[curr_scene])
+    if curr_scene in _collisions:
+        print("Collisions:", _collisions[curr_scene])
+    if curr_scene in _triggers:
+        print("Triggers:", _triggers[curr_scene])
+
+
+async def run(script, package_name, states, delay_scenes):
     global _resolved_deps
     num_scenes = states["num_scenes"]
     start_scene = states["curr_scene"]
 
     start_time = time.time()
+
+    # Experimental event function intruction reconstruction.
     #ins_feeder = InstructionFeeder.get_instance()
     #ins_feeder.add_rpc(protocol)
 
@@ -539,8 +522,4 @@ async def run(script, host, states, delay_scenes):
         if not (await start(curr_scene, start_time, states, delay_scenes)):
             continue
         states["curr_scene"] = curr_scene
-    #await start(0, start_time, states, delay_scenes)
-
-
-# if wanted to run standalone.
-#asyncio.run(main())
+        collect_metrics(package_name, start_time, curr_scene)

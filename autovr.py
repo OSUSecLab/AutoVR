@@ -170,9 +170,9 @@ async def main(device_name, package_name, script_file, ssl_offset,
 
             executor.shutdown(wait=False)
             # Get crash logs
-            #print("Getting crash logs")
-            #await extract_crash_logs(device_name, package_name, "/tmp/")
-            #print(f"Done getting crash logs at {package_name}")
+            print("Getting crash logs")
+            await extract_crash_logs(device_name, package_name, "/tmp/")
+            print(f"Done getting crash logs at {package_name}")
     except Exception as e:
         print("autovr Error:", e)
 

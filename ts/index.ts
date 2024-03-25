@@ -21,7 +21,9 @@ rpc.exports = {
   resolveSymbols(payload) { return RPC.resolveSymbols(payload); },
   getAllMethods() { return RPC.getAllMethods(); },
   countAllScenes() { return RPC.countAllScenes(); },
-  loadSceneEvents(scene_index) { return RPC.loadSceneEvents(scene_index); },
+  loadSceneEvents(
+      scene_index, delay_scenes_ms
+      ?) { return RPC.loadSceneEvents(scene_index, delay_scenes_ms); },
   loadScene(scene_index) { return RPC.loadScene(scene_index); },
   unloadScene(scene_index) { return RPC.unloadScene(scene_index); },
   triggerEvent(payload) { return RPC.triggerEvent(payload); },

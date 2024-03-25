@@ -76,16 +76,19 @@ export class Util {
     return builder.buildAndClear();
   }
 
-  static async runOnAllThreads(block: () => any) {
+  static async runOnAllThreads(block: () => any,
+                               breakOnFirstPassed: boolean = true) {
     let allThreads = Il2Cpp.attachedThreads;
     for (let thread of allThreads) {
       try {
         await thread.schedule(() => {
           block();
-          console.log("passed, on thread", thread.id);
+          // console.log("passed, on thread", thread.id);
         });
+        if (breakOnFirstPassed)
+          break;
       } catch (err: any) {
-        console.log(thread.id, "throws err");
+        // console.log(thread.id, "throws err");
       }
     }
   }
