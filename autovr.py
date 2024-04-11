@@ -20,19 +20,23 @@ stop_event = threading.Event()
 
 
 def run_async(script, device, pid, tries, script_file, host, states,
-              delay_scenes):
+              delay_scenes, timeout):
 
     setup_base(script, device, pid, script_file)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    #loop = asyncio.new_event_loop()
+    #asyncio.set_event_loop(loop)
 
     # Possibly error prone here, if count_scenes() fails.
     if states["num_scenes"] == -1:
         states["num_scenes"] = count_scenes()
-
-    loop.run_until_complete(run(script, host, states, delay_scenes))
-    loop.close()
+    try:
+        # Use asyncio.run() to run the asynchronous task with a timeout
+        asyncio.run(
+            asyncio.wait_for(run(script, host, states, delay_scenes),
+                             timeout=timeout))
+    except asyncio.TimeoutError:
+        print("Async task timed out.")
     print("FINISHED returning", host)
     return
 
@@ -89,6 +93,76 @@ async def extract_crash_logs(device_name, dir_name, base_directory):
                                               stderr=subprocess.STDOUT)
 
 
+def start_ant_monitor(device_name):
+    command = [
+        'adb', '-s', device_name, 'shell', 'am', 'start', '-n',
+        'edu.uci.calit2.anteatermo.dev/edu.uci.calit2.anteater.client.android.activity.AntMonitorLauncherActivity',
+        '-a', 'android.intent.action.MAIN', '-c',
+        'android.intent.category.LAUNCHER'
+    ]
+    subprocess.run(command, check=True)
+
+
+def stop_ant_monitor(device_name):
+    package_name = "edu.uci.calit2.anteatermo.dev"
+    command = [
+        'adb', '-s', device_name, 'shell', 'am', 'force-stop', package_name
+    ]
+    subprocess.run(command, check=True)
+
+
+def start_collection(device_name):
+    start_collection = [
+        'adb', '-s', device_name, 'shell', 'am', 'start-activity', '-n',
+        'edu.uci.calit2.anteatermo.dev/edu.uci.calit2.anteater.client.android.activity.VpnStarterActivity',
+        '--ez', 'edu.uci.calit2.anteater.EXTRA_DISCONNECT', 'false'
+    ]
+    subprocess.run(start_collection)
+
+
+def stop_collection(device_name):
+    stop_collection = [
+        'adb', '-s', device_name, 'shell', 'am', 'start-activity', '-n',
+        'edu.uci.calit2.anteatermo.dev/edu.uci.calit2.anteater.client.android.activity.VpnStarterActivity',
+        '--ez', 'edu.uci.calit2.anteater.EXTRA_DISCONNECT', 'true'
+    ]
+    subprocess.run(stop_collection)
+
+
+def clear_collection(device_name):
+    clear_collection = [
+        'adb', '-s', device_name, 'shell', 'rm', '-rf', '/sdcard/antmonitor/*'
+    ]
+    try:
+        subprocess.run(clear_collection, check=True)
+    except:
+        print("Collection Cleared")
+
+
+def get_pcaps_from_collection(device_name, results_directory, package):
+    pcaps_command = [
+        './get_pcaps.sh', '-s', f'{device_name}', '-d',
+        f'{results_directory}/', f'{package}'
+    ]
+    subprocess.run(pcaps_command, check=True)
+
+
+def is_antmonitor_running(device_name):
+    try:
+        # Run adb shell command to check if antmonitor process is running
+        output = subprocess.check_output([
+            'adb', '-s', device_name, 'shell', 'pidof',
+            'edu.uci.calit2.anteatermo.dev'
+        ]).decode().strip()
+        if output:
+            return True
+        else:
+            return False
+    except subprocess.CalledProcessError:
+        # Error occurred, antmonitor might not be installed or device not connected
+        return False
+
+
 def does_contain_package(device_name, package_name):
     command = [
         'adb', '-s', device_name, 'shell', 'pm', 'list', 'packages',
@@ -99,13 +173,26 @@ def does_contain_package(device_name, package_name):
 
 
 async def main(device_name, package_name, script_file, ssl_offset,
-               use_mbed_tls, delay_scenes, is_rooted):
+               use_mbed_tls, delay_scenes, timeout, is_rooted, use_antmonitor,
+               results_directory):
 
     if not does_contain_package(device_name, package_name):
         print(f"{device_name} does not have package {package_name}")
         return
     delay_scenes = int(delay_scenes)
+    timeout = int(timeout)
     pid = None
+
+    if use_antmonitor:
+        if is_antmonitor_running(device_name):
+            stop_collection(device_name)
+            clear_collection(device_name)
+        else:
+            start_ant_monitor(device_name)
+            time.sleep(5)
+        print("STARTING COLLECTION")
+        start_collection(device_name)
+
     try:
         # Housekeeping
         curr_scene = -1
@@ -128,11 +215,12 @@ async def main(device_name, package_name, script_file, ssl_offset,
 
             event = threading.Event()
             # Submit the functions to the executor
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
             run_future = executor.submit(run_async, script, device, pid,
                                          status.tries, script_file,
-                                         package_name, states, delay_scenes)
+                                         package_name, states, delay_scenes,
+                                         timeout)
 
             # Health checking
             check_future = executor.submit(check_frida_ps_async, event,
@@ -178,6 +266,14 @@ async def main(device_name, package_name, script_file, ssl_offset,
 
     frida_kill(package_name, device_name, is_rooted)
     time.sleep(3)
+
+    if use_antmonitor:
+        print("STOPPING COLLECTION")
+        stop_collection(device_name)
+        time.sleep(5)
+        print("COLLECTING RESULTS")
+        get_pcaps_from_collection(device_name, results_directory, package_name)
+
     print("Done")
 
 
@@ -221,17 +317,37 @@ parser.add_argument(
     '--delay_scenes',
     metavar='delay_scenes',
     type=str,
-    default='3',
+    default='3000',
     required=False,
     help=
     'The amount of delay (seconds) between scene loading and event parsing.')
+parser.add_argument('--timeout',
+                    metavar='timeout',
+                    type=str,
+                    default='600',
+                    required=False,
+                    help='The amount of time (s) to perform AutoVR.')
 parser.add_argument('--rooted',
                     metavar='is_rooted',
                     type=bool,
                     default=False,
                     required=False,
                     help='Set to true if the device is rooted.')
+parser.add_argument(
+    '--antmonitor',
+    metavar='antmonitor',
+    type=bool,
+    default=False,
+    required=False,
+    help='Set to true if you want to collect traffic via AntMonitor.')
+parser.add_argument('--results',
+                    metavar='results_directory',
+                    type=bool,
+                    default='../results/',
+                    required=False,
+                    help='The directory to put AntMonitor results in.')
 args = parser.parse_args()
 asyncio.run(
     main(args.device, args.package, args.script_file, args.ssl_offset,
-         args.use_mbed_tls, args.delay_scenes, args.rooted))
+         args.use_mbed_tls, args.delay_scenes, args.timeout, args.rooted,
+         args.antmonitor, args.results))

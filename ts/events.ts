@@ -332,19 +332,25 @@ export class EventLoader {
           let call_count = 0;
           for (const call of all_calls) {
             if (!call.isNull()) {
-              let delegate = call.tryField<Il2Cpp.Object>("Delegate")!.value;
-              let val =
-                  delegate.tryField<Il2Cpp.ValueType>("method_ptr")!.value;
-              k++;
-              call_count++;
-              addrs.push(val.toString());
-              if (!this.efcs.has(val.toString())) {
-                this.efcs.set(val.toString(), new Set());
+              let delegate = call.tryField<Il2Cpp.Object>("Delegate");
+              if (delegate) {
+                let val =
+                    delegate.value.tryField<Il2Cpp.ValueType>("method_ptr");
+                if (val) {
+                  let method_ptr = val.value
+                  k++;
+                  call_count++;
+                  addrs.push(method_ptr.toString());
+                  if (!this.efcs.has(method_ptr.toString())) {
+                    this.efcs.set(method_ptr.toString(), new Set());
+                  }
+                  this.efcs.get(method_ptr.toString())!.add(event);
+                  // console.log(val.toString());
+                  // console.log(
+                  //     AllMethods.getInstance().methods.get(val.toString()));
+                }
               }
-              this.efcs.get(val.toString())!.add(event);
-              // console.log(val.toString());
-              // console.log(
-              //     AllMethods.getInstance().methods.get(val.toString()));
+
             } else {
               nullCount++;
             }
@@ -765,26 +771,16 @@ export class EventTriggerer {
     }
   }
 
-  private async loadNextEvents() {
+  public async loadNextEvents() {
     const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
-
+    console.log("Triggered:");
+    triggeredEvents.triggeredEvents.forEach((key, value) => console.log(key));
     // Get all events loaded but ignore already triggered events.
     return this.loader
         .getEventFunctionCallbacks(await Util.getAllActiveObjects())
         .filter((event) => !triggeredEvents.contains(event) &&
                            instance.contains(event));
-  }
-
-  public sendTriggeredEvents() {
-    const triggeredEvents = TriggeredEvents.getInstance();
-    let res = {
-      "type" : "leaks",
-      "scene" : this.curr_scene,
-      "data" : Array.from(triggeredEvents.triggeredEvents)
-    };
-    send(JSON.stringify(res));
-    triggeredEvents.clear();
   }
 
   public async _triggerEvent(eventAddress: string) {
@@ -794,8 +790,8 @@ export class EventTriggerer {
     const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
     let name =
         instance.contains(eventAddress) ? instance.getMethodName(eventAddress)! : eventAddress;
-    if (!triggeredEvents.contains(name)) {
-      triggeredEvents.addEvent(name);
+    if (!triggeredEvents.contains(eventAddress)) {
+      triggeredEvents.addEvent(eventAddress);
     }
     if (instance.contains(eventAddress)) {
       const emHandle = instance.methods.get(eventAddress);

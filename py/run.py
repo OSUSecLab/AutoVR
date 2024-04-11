@@ -114,8 +114,6 @@ def on_message(message, data):
             print(_per_event)
     elif message["type"] == "error":
         print(message["description"])
-    else:
-        print(message)
 
 
 def contains_targets(name):
@@ -188,7 +186,7 @@ def print_results(package, scene, time):
         "collisions": _collisions[scene],
         "triggers": _triggers[scene],
         "objectsscene": _objects_scene[scene],
-        "sceneevents": _scene_events[scene],
+        "sceneevents": [event.event_name for event in _scene_events[scene]],
         "uievents": _ui_events[scene],
         "unityevents": _unity_events[scene],
         "efc_per_event": _per_event[scene]
@@ -197,13 +195,10 @@ def print_results(package, scene, time):
     # Loop through the dictionaries and write each one to a separate file
     for name, dictionary in dicts.items():
         # Open a new file with a filename based on the dictionary name
-        with open(f'../data/{package}_{name}_{scene}.json', "w") as f:
+        with open(f'../data_exp/{package}_{name}_{scene}.json', "w") as f:
             # Use the json.dump method to write the dictionary to the file in JSON format
             json.dump(dictionary, f)
-    with open(f"../data/{package}_resolved_{scene}.json", "w") as f:
-        # use the json.dump method to write the dictionary to the file in json format
-        json.dump(_resolved_deps, f)
-    with open(f"../data/{package}_time_{scene}.json", "w") as f:
+    with open(f"../data_exp/{package}_time_{scene}.json", "w") as f:
         # use the json.dump method to write the dictionary to the file in json format
         json.dump(str(time), f)
 
@@ -266,7 +261,7 @@ async def trigger_events_path(starting_node, event_graph):
         next_events = await trigger_event(event_node.event_name, sequence)
         event_node.markTriggered()
 
-        print(next_events)
+        print("Next Events:", next_events)
         for next_event in next_events:
             next_event_node = EventNode(next_event, event_node)
             event_node.addChild(next_event_node)
@@ -321,7 +316,7 @@ def _process_pids(pids):
     final = dict()
     for pid in pids:
         pid_entry = pid.lstrip().rstrip()  # remove trailing whitespace
-        if pid_entry != '':
+        if pid_entry != '' and len(pid_entry.split('  ')) > 3:
             process_id, name = pid_entry.split('  ', 1)
             final[name] = process_id
     return final
@@ -349,12 +344,13 @@ def find_package_pid(package, device_name, rooted=False):
 
 
 def frida_kill(host, device_name, rooted=False):
-    pid = find_package_pid(host, device_name, rooted)
+    print("killing Frida")
     command = ['frida-kill', '-D', device_name, 'Gadget']
-    if rooted and pid != -1:
+    if rooted:
+        pid = find_package_pid(host, device_name, rooted)
+        if pid == -1:
+            return
         command = ['frida-kill', '-D', device_name, f"{pid}"]
-    elif pid == -1:
-        return
     process = subprocess.Popen(command)
     try:
         process.wait(3)
@@ -384,19 +380,21 @@ def spawn_package(device_name, package):
 
 
 def setup(device_name,
-          host,
+          package_name,
           ssl_offset='',
           use_mbed_tls=True,
           is_rooted=False):
 
-    frida_kill(host, device_name, is_rooted)
+    frida_kill(package_name, device_name, is_rooted)
 
-    #if not spawn_package(device_name, host):
-    #    return (None, None, None)
-    #gadget = "re.frida.Gadget"
     device = frida.get_device(device_name)
-    pid = device.spawn([host])  # 're.frida.Gadget' if running gadget
-    #pid = device.get_frontmost_application(scope="full").pid
+    if is_rooted:
+        pid = device.spawn([package_name
+                            ])  # 're.frida.Gadget' if running gadget
+    else:
+        if not spawn_package(device_name, package_name):
+            return (None, None, None)
+        pid = device.get_frontmost_application(scope="full").pid
 
     session = device.attach(pid)
     script = session.create_script(open("index.out.js").read())
@@ -461,6 +459,7 @@ async def start(curr_scene, start_time, states, delay_scenes):
         # time.sleep(delay_scenes)
         init_events = protocol.load_scene_events(curr_scene, delay_scenes)
 
+        init_events = set(init_events)
         all_events = set()
 
         event_graph = EventGraph(curr_scene, init_events)
@@ -473,12 +472,14 @@ async def start(curr_scene, start_time, states, delay_scenes):
         print("event_graph", event_graph)
         paths = await trigger_events_path(event_graph.scene_node, event_graph)
         all_events |= set(paths)
-        while paths is not None:
+        while paths:
             next_events = protocol.load_scene_events(curr_scene, delay_scenes)
+            next_events = set(next_events)
+            print("next_events:", next_events)
             if len(next_events) < 1: break
             paths = await trigger_events_path(event_graph.scene_node,
                                               event_graph)
-            if paths is not None:
+            if paths:
                 all_events |= set(paths)
 
         print("FINISH SCENE")
@@ -492,17 +493,22 @@ async def start(curr_scene, start_time, states, delay_scenes):
 
 
 def collect_metrics(package_name, start_time, curr_scene):
-    end_time = time.time()
-    print_results(package_name, curr_scene, end_time - start_time)
+    try:
+        end_time = time.time()
+        print_results(package_name, curr_scene, end_time - start_time)
 
-    print("Time taken:", end_time - start_time)
-    print("Scene: ", curr_scene, " | ", "Objects:", _objects_scene[curr_scene])
-    if curr_scene in _per_event:
-        print("Events: ", _per_event[curr_scene])
-    if curr_scene in _collisions:
-        print("Collisions:", _collisions[curr_scene])
-    if curr_scene in _triggers:
-        print("Triggers:", _triggers[curr_scene])
+        print("Time taken:", end_time - start_time)
+        print("Scene: ", curr_scene, " | ", "Objects:",
+              _objects_scene[curr_scene])
+        if curr_scene in _per_event:
+            print("Events: ", _per_event[curr_scene])
+        if curr_scene in _collisions:
+            print("Collisions:", _collisions[curr_scene])
+        if curr_scene in _triggers:
+            print("Triggers:", _triggers[curr_scene])
+    except Exception as err:
+        traceback.print_exc()
+        print("collect_metrics:", err)
 
 
 async def run(script, package_name, states, delay_scenes):
@@ -511,14 +517,13 @@ async def run(script, package_name, states, delay_scenes):
     start_scene = states["curr_scene"]
 
     start_time = time.time()
-
     # Experimental event function intruction reconstruction.
     #ins_feeder = InstructionFeeder.get_instance()
     #ins_feeder.add_rpc(protocol)
 
     print("NUMBER OF SCENES:", num_scenes)
     for curr_scene in range(start_scene, num_scenes):
-        print(curr_scene)
+        print("curr_scene", curr_scene)
         if not (await start(curr_scene, start_time, states, delay_scenes)):
             continue
         states["curr_scene"] = curr_scene

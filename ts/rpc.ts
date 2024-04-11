@@ -176,14 +176,15 @@ export class RPC {
 
   static async countAllScenes() {
     RPC.healthCheckCount = 0;
-    let count = Loader.countAllScenes();
+    let count = await Loader.countAllScenes();
     console.log("countAllScenes:", count);
     return count;
   }
 
-  static loadSceneEvents(scene_index: number, delay_scenes_ms: number = 5000) {
+  static async loadSceneEvents(scene_index: number,
+                               delay_scenes_ms: number = 5000) {
     RPC.healthCheckCount = 0;
-    let eventNames = Loader.loadSceneEvents(scene_index, delay_scenes_ms);
+    let eventNames = await Loader.loadSceneEvents(scene_index, delay_scenes_ms);
     console.log("eventNames:", eventNames)
     return eventNames;
   }

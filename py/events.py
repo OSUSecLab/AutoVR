@@ -65,7 +65,7 @@ class EventGraph:
 
     def findNextPath(self, start, path=[]):
         if start.all_visited:
-            return path
+            return None
         path = path + [start]
         if len(start.children) == 0:
             return path

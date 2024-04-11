@@ -59,34 +59,51 @@ export class Loader {
     const op = recv('cert_func', jsonStr => {
       function_offset = jsonStr.offset;
       use_mbed_tls = jsonStr.use_mbed_tls;
+      if (function_offset) {
+        APIHooker.bypassJavaSSLPinning();
+        console.log("FUNCTION OFFSET:", function_offset);
+        APIHooker.bypassUnitySSLPinning(new NativePointer(function_offset),
+                                        use_mbed_tls);
+      } else {
+        console.log("SSL PINNING FAILED, function_offet not provided.");
+      }
     });
-    op.wait();
-    if (function_offset) {
-      APIHooker.bypassJavaSSLPinning();
-      console.log("FUNCTION OFFSET:", function_offset);
-      APIHooker.bypassUnitySSLPinning(new NativePointer(function_offset),
-                                      use_mbed_tls);
-    } else {
-      console.log("SSL PINNING FAILED, function_offet not provided.");
+  }
+
+  private static hookOvrEntitlements(img: Il2Cpp.Image) {
+    let capi = img.tryClass("Oculus.Platform.CAPI");
+    if (capi != null) {
+      capi.method<void>("ovr_Entitlement_GetIsViewerEntitled").implementation =
+          function() {
+        // TODO: seems like most games don't check return value, but it might
+        // be worth looking into creating a fake UInt64 object that points to
+        // a succeeded Message.
+        console.log("Entitlements called, returning nothing.");
+        return 0;
+      };
     }
   }
 
   private static bypassEntitlements() {
     let oculusPlatform = Il2Cpp.domain.tryAssembly("Oculus.Platform.dll")
+    let assembly = Il2Cpp.domain.tryAssembly("Assembly-CSharp.dll")
+    let oculus_vr = Il2Cpp.domain.tryAssembly("Oculus.VR.dll")
     if (oculusPlatform != null) {
       let img = oculusPlatform.image;
       console.log("Timing");
-      let capi = img.tryClass("Oculus.Platform.CAPI");
-      if (capi != null) {
-        capi.method<void>("ovr_Entitlement_GetIsViewerEntitled")
-            .implementation = function() {
-          // TODO: seems like most games don't check return value, but it might
-          // be worth looking into creating a fake UInt64 object that points to
-          // a succeeded Message.
-          console.log("Entitlements called, returning nothing.");
-          return 0;
-        };
-      }
+      Loader.hookOvrEntitlements(img)
+    }
+    else if (oculus_vr != null) {
+      // Maybe it's in the assembly
+      let img = oculus_vr.image;
+      console.log("Timing");
+      Loader.hookOvrEntitlements(img)
+    }
+    else if (assembly != null) {
+      // Maybe it's in the assembly
+      let img = assembly.image;
+      console.log("Timing");
+      Loader.hookOvrEntitlements(img)
     }
   }
 
@@ -101,11 +118,10 @@ export class Loader {
 
   private static init() {
     console.log("Initializing classes...");
-    const classes = Classes.getInstance();
     // To see exceptions:
     // Il2Cpp.installExceptionListener("all");
 
-    Loader.bypassEntitlements();
+    // Loader.bypassEntitlements();
     Loader.resolveSymbols();
 
     Il2Cpp.domain.assemblies.forEach(assemb => {
@@ -124,15 +140,13 @@ export class Loader {
   public static async loadSceneEvents(scene_index: number,
                                       delay_scenes_ms: number = 5000) {
     let instance = Classes.getInstance();
-    console.log("loadSceneEvents")
+    console.log("loadSceneEvents");
     if (instance.SceneManager) {
       var Method_LoadSceneAsyncNameIndexInternal =
           instance.SceneManager.method("LoadSceneAsyncNameIndexInternal");
       let promise = new Promise<any>((resolve, reject) => {
         Method_LoadSceneAsyncNameIndexInternal.implementation = function(
             v1, v2, v3, v4): any {
-          APIHooker.revertEntitlementCheck_alt();
-          APIHooker.hookEntitlementCheck_alt();
           const result = Method_LoadSceneAsyncNameIndexInternal.executeStatic(
               v1, v2, v3, v4);
           console.log("Method_LoadSceneAsyncNameIndexInternal:" + v1 + ":" + v2,
@@ -142,9 +156,11 @@ export class Loader {
         };
         curr_event = '';
         curr_scene = scene_index;
-        Loader.loadScene("", scene_index, true);
+        console.log("SceneManager");
       });
-      let scene = await promise;
+      await Loader.loadScene("", scene_index, true);
+      curr_scene = scene_index;
+      // let scene = await promise;
       Method_LoadSceneAsyncNameIndexInternal.revert();
       // console.log(scene, scene.length);
       Loader.revertSceneChange();
@@ -166,7 +182,7 @@ export class Loader {
 
       eventLoader = new EventLoader(curr_scene);
       eventTriggerer = new EventTriggerer(curr_scene, eventLoader);
-      return eventLoader.getEventFunctionCallbacks(currentObjects);
+      return eventTriggerer.loadNextEvents();
     }
   }
 
@@ -253,7 +269,7 @@ export class Loader {
       // console.log("LoadSceneParameters_instance:" +
       //            LoadSceneParameters_instance);
 
-      console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
+      // console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
       return Il2Cpp.mainThread.schedule(() => {
         var ret = null;
         let SceneManager = instance.SceneManager;
@@ -336,6 +352,13 @@ export class Loader {
           SceneManager.tryMethod("get_sceneCountInBuildSettings")
       if (getSceneCount) {
         var sceneCount = getSceneCount.executeStatic() as number;
+        console.log("Scene Count", sceneCount);
+        return sceneCount;
+      }
+      getSceneCount = SceneManager.tryMethod("get_sceneCount")
+      if (getSceneCount) {
+        var sceneCount = getSceneCount.executeStatic() as number;
+        console.log("Scene Count", sceneCount);
         return sceneCount;
       }
     }
@@ -358,7 +381,7 @@ export class Loader {
 
   public static async start() {
     console.log("Attatching...");
-    // Loader.bypassSSLPinning();
+    Loader.bypassSSLPinning();
     return Il2Cpp.perform(() => {
       console.log("Performing Il2Cpp");
       try {
