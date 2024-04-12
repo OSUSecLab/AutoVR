@@ -160,7 +160,7 @@ export class Loader {
       });
       await Loader.loadScene("", scene_index, true);
       curr_scene = scene_index;
-      // let scene = await promise;
+      let scene = await promise;
       Method_LoadSceneAsyncNameIndexInternal.revert();
       // console.log(scene, scene.length);
       Loader.revertSceneChange();
@@ -170,9 +170,13 @@ export class Loader {
 
       // Wait for Update() calls on all gameobjects
       await wait(delay_scenes_ms);
+      console.log("done");
       let currentObjects = await Util.getAllActiveObjects();
+      console.log("done");
       ResolvedObjects.getInstance().clear()
+      console.log("done");
       ResolvedObjects.getInstance().addComps(currentObjects);
+      console.log("done");
       let res = {
         "type" : "objects_per_scene",
         "scene" : curr_scene,
@@ -270,29 +274,36 @@ export class Loader {
       //            LoadSceneParameters_instance);
 
       // console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
-      return Il2Cpp.mainThread.schedule(() => {
-        var ret = null;
-        let SceneManager = instance.SceneManager;
-        if (SceneManager) {
-          if (index == -1) {
-            console.log("LOAD SCENE");
-            ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
-                      .executeStatic(Il2Cpp.string(name), -1,
-                                     LoadSceneParameters_instance.unbox(),
-                                     true) as Il2Cpp.Object;
-          } else {
-            console.log("LOAD SCENE");
-            ret =
-                SceneManager.method("LoadScene")
-                    .overload("System.Int32",
-                              "UnityEngine.SceneManagement.LoadSceneParameters")
-                    .executeStatic(index,
-                                   LoadSceneParameters_instance.unbox()) as
-                Il2Cpp.Object;
+      let promise = new Promise<any>((resolve, reject) => {
+        return Il2Cpp.perform(() => {
+          var ret = null;
+          let SceneManager = instance.SceneManager;
+          if (SceneManager) {
+            if (index == -1) {
+              console.log("LOAD SCENE");
+              ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                        .executeStatic(Il2Cpp.string(name), -1,
+                                       LoadSceneParameters_instance.unbox(),
+                                       true) as Il2Cpp.Object;
+            } else {
+              console.log("LOAD SCENE");
+              SceneManager.methods.forEach((name, method) =>
+                                               console.log(name, method));
+              console.log(SceneManager.methods);
+              console.log(SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                              .il2cppMethod);
+              ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                        .executeStatic(Il2Cpp.string(name), index,
+                                       LoadSceneParameters_instance.unbox(),
+                                       true) as Il2Cpp.Object;
+            }
           }
-        }
-        return ret;
+          resolve(ret);
+        });
       });
+      let scene = await promise;
+      console.log(scene);
+      return scene;
     }
     return null;
   }
@@ -355,17 +366,19 @@ export class Loader {
         console.log("Scene Count", sceneCount);
         return sceneCount;
       }
+      /*
       getSceneCount = SceneManager.tryMethod("get_sceneCount")
       if (getSceneCount) {
         var sceneCount = getSceneCount.executeStatic() as number;
         console.log("Scene Count", sceneCount);
         return sceneCount;
       }
+     */
     }
     var maxSceneCount = 50;
     var sceneCount = 0;
     var ret = null;
-    for (var i = 1; i < maxSceneCount; i++) {
+    for (var i = 0; i < maxSceneCount; i++) {
       ret = await Loader.loadScene("", i, true);
       console.log("ret:" + i + ":" + ret);
       if (ret == null || ret.isNull()) {
@@ -373,7 +386,7 @@ export class Loader {
       } else {
         await wait(2000);
       }
-      sceneCount = i;
+      sceneCount++;
     }
     console.log("Scene Count", sceneCount);
     return sceneCount;

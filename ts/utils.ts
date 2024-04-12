@@ -83,7 +83,7 @@ export class Util {
       try {
         await thread.schedule(() => {
           block();
-          // console.log("passed, on thread", thread.id);
+          console.log("passed, on thread", thread.id);
         });
         if (breakOnFirstPassed)
           break;
@@ -91,6 +91,7 @@ export class Util {
         // console.log(thread.id, "throws err");
       }
     }
+    return null;
   }
 
   static objectsOfClass(clazz: Il2Cpp.Class, objs: Il2Cpp.Object[]) {

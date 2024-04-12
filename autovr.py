@@ -28,6 +28,8 @@ def run_async(script, device, pid, tries, script_file, host, states,
     #asyncio.set_event_loop(loop)
 
     # Possibly error prone here, if count_scenes() fails.
+    if "num_scenes" not in states:
+        states["num_scenes"] = -1
     if states["num_scenes"] == -1:
         states["num_scenes"] = count_scenes()
     try:
@@ -231,6 +233,10 @@ async def main(device_name, package_name, script_file, ssl_offset,
                 [run_future, check_future]):
                 print("CURRENT SCENE", states["curr_scene"])
                 print(future)
+                try:
+                    future.result()
+                except Exception as err:
+                    raise err
                 # If frida process is lost (a crash)
                 if future is check_future:
                     # Restart to scene
@@ -263,6 +269,7 @@ async def main(device_name, package_name, script_file, ssl_offset,
             print(f"Done getting crash logs at {package_name}")
     except Exception as e:
         print("autovr Error:", e)
+        raise e
 
     frida_kill(package_name, device_name, is_rooted)
     time.sleep(3)

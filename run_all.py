@@ -88,24 +88,12 @@ def run_autovr(device_name, package, script_file, delay_scenes,
                results_directory, ssl_offset, use_mbed_tls, timeout,
                is_rooted):
     subprocess.run([
-        'python3.11',
-        'autovr.py',
-        '--device',
-        device_name,
-        '--package',
-        package,
-        '--results',
-        results_directory,
-        '--ssl-offset',
-        ssl_offset,
-        '--use-mbed-tls',
-        str(use_mbed_tls),
-        '--delay_scenes',
-        str(delay_scenes),
-        '--timeout',
-        str(timeout),
-        '--antmonitor',
-        'True',
+        'python3.11', 'autovr.py', '--device', device_name, '--package',
+        package, '--results', results_directory, '--ssl-offset',
+        str(ssl_offset), '--use-mbed-tls',
+        str(use_mbed_tls), '--delay_scenes',
+        str(delay_scenes), '--timeout',
+        str(timeout), '--antmonitor', 'True'
     ])
 
 

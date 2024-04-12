@@ -336,7 +336,7 @@ def frida_ps_list(device_name):
 def find_package_pid(package, device_name, rooted=False):
     if not rooted:
         print("Device not rooted, using re.frida.Gadget instead.")
-        package = "re.frida.Gadget"
+        package = "Gadget"
     pids = frida_ps_list(device_name)
     if package in list(pids.keys()):
         return int(pids[package])
@@ -345,8 +345,9 @@ def find_package_pid(package, device_name, rooted=False):
 
 def frida_kill(host, device_name, rooted=False):
     print("killing Frida")
-    command = ['frida-kill', '-D', device_name, 'Gadget']
-    if rooted:
+    if not rooted:
+        command = ['frida-kill', '-D', device_name, "Gadget"]
+    else:
         pid = find_package_pid(host, device_name, rooted)
         if pid == -1:
             return
@@ -389,6 +390,7 @@ def setup(device_name,
 
     device = frida.get_device(device_name)
     if is_rooted:
+        print("Spawning")
         pid = device.spawn([package_name
                             ])  # 're.frida.Gadget' if running gadget
     else:
@@ -425,7 +427,7 @@ def setup_base(script, device, pid, file):
         script.post({'type': 'input', 'payload': json.dumps(on)})
     else:
         script.post({'type': 'input', 'payload': ''})
-
+    print(pid)
     device.resume(pid)
     res = protocol.init()
     res = json.loads(res)
@@ -441,6 +443,7 @@ def count_scenes(tries=3):
     # Ensure setup_base() was called beforehand
     print("COUNTING SCENES")
     count = 0
+    num_scenes = 0
     while count < tries:
         try:
             num_scenes = protocol.count_all_scenes()
