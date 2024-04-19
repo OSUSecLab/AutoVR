@@ -1,13 +1,13 @@
 import "frida-il2cpp-bridge"
 
-import {Event} from './events'
+import {Event} from './events.js'
 import {
   AllClasses,
   AllMethods,
   Loader,
   ResolvedSymbols,
-} from "./loader"
-import {promiseTimeout, Util} from "./utils"
+} from "./loader.js"
+import {promiseTimeout, Util} from "./utils.js"
 
 export const loadSceneNotifier = new Int32Array(new SharedArrayBuffer(1024))
 export const initNotifier = new Int32Array(new SharedArrayBuffer(1024))

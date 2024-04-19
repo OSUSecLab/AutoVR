@@ -1,4 +1,4 @@
-import {AllMethods, ResolvedClasses, ResolvedObjects} from "./loader"
+import {AllMethods, ResolvedClasses, ResolvedObjects} from "./loader.js"
 
 export class Resolver {
   protected constructor() {}

@@ -1,6 +1,6 @@
-import {Classes} from './classes'
-import {AllMethods, ResolvedSymbols} from './loader'
-import {UnityMethod} from './unity_types'
+import {Classes} from './classes.js'
+import {AllMethods, ResolvedSymbols} from './loader.js'
+import {UnityMethod} from './unity_types.js'
 
 export const promiseTimeoutRevert =
     function(ms: number, promise: Promise<any>,

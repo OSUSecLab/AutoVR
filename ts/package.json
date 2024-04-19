@@ -3,16 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
-    "@types/frida-gum": "^17.3.1",
-    "assert-ts": "^0.3.4",
-    "frida-compile": "^10.2.5",
+    "@types/frida-gum": "^18.5.1",
+    "@types/node": "^18.19.3",
+    "frida-compile": "^16.4.1",
     "frida-il2cpp-bridge": "^0.8.5"
   },
   "devDependencies": {
     "@types/node": "^17.0.45"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prepare": "npm run build",
+    "build": "frida-compile autovr.ts -o ../index.out.js --no-source-maps"
   },
   "author": "",
   "license": "ISC",

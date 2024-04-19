@@ -1,7 +1,7 @@
-import {Classes} from './classes';
-import {AllMethods, Loader, ResolvedObjects, wait} from './loader';
-import {UnityObject} from './unity_types';
-import {promiseTimeout, Util} from './utils';
+import {Classes} from './classes.js';
+import {AllMethods, Loader, ResolvedObjects, wait} from './loader.js';
+import {UnityObject} from './unity_types.js';
+import {promiseTimeout, Util} from './utils.js';
 
 let blacklist = [
   "UnityEngine.Vector2", "UnityEngine.Vector3", "UnityEngine.Transform",

@@ -1,6 +1,6 @@
-import {Classes} from './classes';
-import {TriggeredEvents} from './events';
-import {AllMethods} from './loader';
+import {Classes} from './classes.js';
+import {TriggeredEvents} from './events.js';
+import {AllMethods} from './loader.js';
 
 const libunity = "libunity.so";
 const mbedtls = "mbedtls_x509_crt_verify_with_profile";

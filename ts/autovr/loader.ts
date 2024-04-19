@@ -1,13 +1,11 @@
 import "frida-il2cpp-bridge";
 
-import assert from 'assert-ts'
-
-import {Classes} from "./classes"
-import {Event, EventLoader, EventTriggerer} from "./events"
-import {APIHooker} from "./hooks"
-import {initNotifier, loadSceneNotifier, RPC} from './rpc'
-import {UnityClass, UnityMethod, UnityObject} from "./unity_types"
-import {promiseTimeout, promiseTimeoutRevert, Util} from './utils'
+import {Classes} from "./classes.js"
+import {Event, EventLoader, EventTriggerer} from "./events.js"
+import {APIHooker} from "./hooks.js"
+import {initNotifier, loadSceneNotifier, RPC} from './rpc.js'
+import {UnityClass, UnityMethod, UnityObject} from "./unity_types.js"
+import {promiseTimeout, promiseTimeoutRevert, Util} from './utils.js'
 
 export const wait = (ms: number) =>
     new Promise(resolve => setTimeout(resolve, ms));
@@ -24,6 +22,8 @@ var curr_scene: number = 0;
 
 var eventLoader: EventLoader;
 var eventTriggerer: EventTriggerer;
+
+declare function assert(value: unknown): asserts value;
 
 export class Loader {
   protected constructor() {}
