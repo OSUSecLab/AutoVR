@@ -1,21 +1,33 @@
 {
-  "name": "firdail2cpp",
+  "name": "autovr-ts",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "type": "module",
   "dependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
     "@types/frida-gum": "^18.5.1",
     "@types/node": "^18.19.3",
     "frida-compile": "^16.4.1",
     "frida-il2cpp-bridge": "^0.8.5"
   },
   "devDependencies": {
-    "@types/node": "^17.0.45"
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@types/node": "^17.0.45",
+    "rollup": "^4.16.4",
+    "rollup-plugin-dts": "^6.1.0",
+    "rollup-plugin-dts-bundle-generator": "^1.4.0",
+    "typescript": "^5.4.5"
   },
   "scripts": {
     "prepare": "npm run build",
-    "build": "frida-compile autovr.ts -o ../index.out.js --no-source-maps"
+    "build": "tsc --build --verbose",
+    "build-frida": "frida-compile -o ../index.out.js --no-source-maps dist/autovr.js"
   },
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "files": [
+    "./dist/**/*.d.ts",
+    "./dist/**/*.js"
+  ]
 }

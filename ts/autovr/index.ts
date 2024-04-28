@@ -32,6 +32,6 @@ function run_module() {
 }
 
 export default ({
-    "description": "Wrap around frida script",
+    "description": "Entry point for AutoVR's frida script",
     "entry_point": run_module,
 })

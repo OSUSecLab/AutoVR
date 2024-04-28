@@ -162,3 +162,4 @@ cython_debug/
 ts/node_modules/
 index.out.js
 data/
+autovr-ts-*.tgz
