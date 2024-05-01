@@ -402,7 +402,7 @@ export class Loader {
     return sceneCount;
   }
 
-  public static async start(symbol_payload: string="", bypassEntitlement: boolean=true, bypassSSLPinning: boolean=false) {
+  public static async start(symbol_payload: string, bypassEntitlement: boolean, bypassSSLPinning: boolean) {
     console.log("Attaching...");
     if (bypassSSLPinning) {
       console.log("Adding hook to bypassing SSL Pinning ...")

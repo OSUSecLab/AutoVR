@@ -1,8 +1,10 @@
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
-frida:dist
-	@ ./node_modules/.bin/frida-compile -o ../index.out.js --no-source-maps autovr.ts
+frida:index.out.js
+
+index.out.js:dist
+	@ ./node_modules/.bin/frida-compile -o index.out.js --no-source-maps autovr.ts
 
 dist:node_modules
 	@ npm install --save-dev rollup typescript rollup-plugin-dts
@@ -17,7 +19,7 @@ node_modules:
 
 clean:
 	@ rm -rf dist
-	@ rm -f ../index.ogoout.js
+	@ rm -f index.out.js
 	@ rm -rf autovr-ts.*.tgz
 
 .DEFAULT_GOAL := dist

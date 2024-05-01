@@ -1,7 +1,7 @@
 import os
 import pathlib
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import time
 import json
 import subprocess
@@ -631,6 +631,7 @@ class AutoVRLaunchableFridaApp(ABC):
     def start_app_suspended(
         self,
         process_detach_event: threading.Event,
+        on_message_callback: Callable[[Dict[str, Any], Any], None],
     ) -> AutoVRResumableFridaApp:
         """Start a process based on the provided package_name and method table.
         The function will create the process in suspended state, and return an

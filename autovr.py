@@ -13,8 +13,8 @@ from typing import Any, Dict, Callable, List, Tuple
 import frida
 from frida.core import Script
 
-from py.run import AutoVR, AutoVRMethodMap, AutoVRResumableFridaApp, AutoVRLaunchableFridaApp
-from py.rpc import RPC
+from autovr.run import AutoVR, AutoVRMethodMap, AutoVRResumableFridaApp, AutoVRLaunchableFridaApp
+from autovr.rpc import RPC
 
 
 logging.basicConfig(
@@ -206,7 +206,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
 
         session = device.attach(pid)
         session.on("detached", frida_on_detached)
-        script = session.create_script(open("index.out.js", newline='\n', encoding="utf-8").read())
+        script = session.create_script(open("ts/index.out.js", newline='\n', encoding="utf-8").read())
 
         protocol.set_export_sync(script.exports_sync)
         protocol.set_export_async(script.exports_async)
