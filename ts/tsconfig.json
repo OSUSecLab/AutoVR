@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
-    "target": "esnext",
-    "lib": [
-        "es2020"
-    ],
-    "experimentalDecorators": true,
-    "module": "commonjs",
-    "allowJs": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "strict": true
-  }
+    "target": "es2020",
+    "lib": ["es2020"],
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "rootDir": "./",
+    "outDir": "./dist",
+    "declaration": true
+  },
+  "include": [
+    "./autovr/**/*.ts"
+  ]
 }

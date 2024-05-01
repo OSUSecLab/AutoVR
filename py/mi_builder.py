@@ -30,6 +30,12 @@ class Instruction:
 
     def to_string(self):
         return self.instruction
+    
+    def __repr__(self) -> str:
+        return self.to_string()
+    
+    def __str__(self) -> str:
+        return self.to_string()
 
 
 class InstructionFeeder:
@@ -284,8 +290,8 @@ class CFGNode:
             offset = modif_ins[3].replace(']',
                                           '').replace('#',
                                                       '').replace('!', '')
-        if (self._key_of(dst)) == self.co_reg and size > 3:
-            self.writes.add(offset)
+            if (self._key_of(dst)) == self.co_reg and size > 3:
+                self.writes.add(offset)
 
     # 0   1   2
     # mov x0, x1

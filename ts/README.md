@@ -1,1 +1,1 @@
-Make sure to run`npm install` before starting frida-compile.
+Make sure to run `make frida` which will build the index.out.js

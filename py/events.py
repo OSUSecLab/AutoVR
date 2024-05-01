@@ -38,6 +38,12 @@ class EventNode:
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+    
+    def __repr__(self) -> str:
+        return self.to_string()
+    
+    def __str__(self) -> str:
+        return self.to_string()
 
     def to_string(self):
         return self.event_name

@@ -1,6 +1,4 @@
-import "frida-il2cpp-bridge";
-
-import assert from 'assert-ts';
+import "frida-il2cpp-bridge"
 
 import {
   AllMethods,
@@ -8,10 +6,16 @@ import {
   ResolvedClasses,
   ResolvedObjects,
   ResolvedSymbols
-} from './loader'
+} from './loader.js'
 
 const targetMethods = [ "LoadSceneAsyncNameIndexInternal" ];
 var currMethodName = '';
+
+function assert(value: unknown): asserts value {
+  if (!value) {
+    throw new Error("Assertion failed");
+  }
+}
 
 export class UnityClass {
   imageClass!: Il2Cpp.Class; // TODO: Add Mono class descriptor once built.
@@ -276,6 +280,7 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
 
   get virtualAddress(): NativePointer {
     assert(this.initialized);
+    assert(this.il2cppMethod != null);
     return this.il2cppMethod.virtualAddress;
   }
 

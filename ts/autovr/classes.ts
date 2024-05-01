@@ -1,4 +1,4 @@
-import {UnityClass, UnityMethod} from "./unity_types"
+import {UnityClass, UnityMethod} from "./unity_types.js"
 
 export class Classes {
   private static instance: Classes;

@@ -39,6 +39,21 @@ def parse_apk_map(file_path):
     return apk_dict
 
 
+def setup_base(script, device, pid, file):
+    if file and file != '' and os.path.exists(file):
+        f = open(file, "r")
+        on = json.loads(f.read())
+        script.post({'type': 'input', 'payload': json.dumps(on)})
+    else:
+        script.post({'type': 'input', 'payload': ''})
+
+    device.resume(pid)
+    res = protocol.init()
+    res = json.loads(res)
+    base = res["base"]
+    parse_all_methods(res["all_methods"])
+    
+
 def run_async(script, device, pid, tries, script_file, host, states):
 
     setup_base(script, device, pid, script_file)
