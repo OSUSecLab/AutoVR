@@ -21,8 +21,21 @@ class RPC:
     def set_export_sync(self, exports):
         self.exports_sync = exports
 
-    def init(self):
-        return self.exports_sync.init()
+    def init(self, symbol_payload: str="", bypassEntitlement: bool=True, bypassSSLPinning: bool=False):
+        """
+        symbol payload format is a json string:
+        {
+           "methods": [
+              {
+                 "Name": "method name",
+                 "Address": "0x12345",
+                 "MethodAddress": "0x12345",
+              },
+              ...
+           ]
+        }
+        """
+        return self.exports_sync.init(symbol_payload, bypassEntitlement, bypassSSLPinning)
 
     def check_health(self):
         return self.exports_async.check_health()

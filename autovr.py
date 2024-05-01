@@ -13,7 +13,7 @@ from typing import Any, Dict, Callable, List, Tuple
 import frida
 from frida.core import Script
 
-from py.run import AutoVR, AutoVRResumableFridaApp, AutoVRLaunchableFridaApp
+from py.run import AutoVR, AutoVRMethodMap, AutoVRResumableFridaApp, AutoVRLaunchableFridaApp
 from py.rpc import RPC
 
 
@@ -40,6 +40,7 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         package_name: str,
         protocol: RPC,
         script: Script,
+        il2cpp_script_json: Dict[str, Any],
     ) -> None:
         self.device = device
         self.pid = pid
@@ -47,9 +48,26 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         self.package_name = package_name
         self.script = script
         self.device_name = device_name
+        self.il2cpp_script_json = il2cpp_script_json
 
-    def resume(self) -> None:
+    def resume(self) -> AutoVRMethodMap:
         self.device.resume(self.pid)
+        
+        scriptMetadataMethods = {
+            "ScriptMetadataMethod": self.il2cpp_script_json["ScriptMetadataMethod"]
+        }
+
+        # init rpc protocol. it returns a json format
+        #  {
+        #     "base": "<baseaddress>",
+        #     "all_methods": [
+        #         ...
+        #     ]
+        #  }
+        res = json.loads(
+            self.protocol.init(symbol_payload=json.dumps(scriptMetadataMethods))
+        )
+        return AutoVRMethodMap(res["all_methods"])
         
     async def check_health_async(self) -> bool:
         try:
@@ -85,7 +103,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         self, 
         device_name: str,
         package_name: str,
-        methods: Dict[str, Any],
+        il2cpp_script_json: Dict[str, Any],
         rooted: bool = False,
         ssl_offset: str ='',
         use_mbed_tls: bool = True,
@@ -95,7 +113,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         self.rooted = rooted
         self.ssl_offset = ssl_offset
         self.use_mbed_tls = use_mbed_tls
-        self.methods = methods
+        self.il2cpp_script_json = il2cpp_script_json
         
     # originally from run.py: _process_pids
     def _process_pids(self, pids: List[str]):
@@ -188,7 +206,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
 
         session = device.attach(pid)
         session.on("detached", frida_on_detached)
-        script = session.create_script(open("index.out.js").read())
+        script = session.create_script(open("index.out.js", newline='\n', encoding="utf-8").read())
 
         protocol.set_export_sync(script.exports_sync)
         protocol.set_export_async(script.exports_async)
@@ -232,10 +250,6 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         if script is None and device is None and pid is None:
             raise RuntimeError("Frida not properly setup, ensure Frida is running on the device.")
         
-        # send the method offsets before process is resumed
-        payload = json.dumps(self.methods)
-        script.post({"type": "input", "payload": payload})
-
         return AutoVRResumableFridaAppImpl(
             device=device,
             device_name=self.device_name,
@@ -243,6 +257,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             package_name=self.package_name,
             script=script,
             protocol=protocol,
+            il2cpp_script_json=self.il2cpp_script_json,
         )
         
 
@@ -355,7 +370,7 @@ async def main(
     # preload the Unity symbols for the provided app
     if script_file != "" and os.path.exists(script_file):
         with open(script_file, "r", encoding="utf-8") as f:
-            methods = json.loads(f.read())
+            il2cpp_script_json = json.loads(f.read())
     else:
         raise RuntimeError(
             "Must provide a valid script_json file from il2cppdumper"
@@ -369,7 +384,7 @@ async def main(
         rooted=is_rooted,
         ssl_offset=ssl_offset,
         use_mbed_tls=use_mbed_tls,
-        methods=methods,
+        il2cpp_script_json=il2cpp_script_json,
     )
     
     pid = None
