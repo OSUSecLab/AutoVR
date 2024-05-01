@@ -29,7 +29,7 @@ export class Loader {
   protected constructor() {}
 
   // TODO: make this into an RPC
-  private static resolveSymbols() {
+  private static resolveSymbols_deprecated() {
     const op = recv('input', jsonStr => {
       if (jsonStr.payload.length > 0) {
         let parse = JSON.parse(jsonStr.payload);
@@ -51,6 +51,38 @@ export class Loader {
       }
     });
     op.wait();
+  }
+
+  private static resolveAllSymbols(symbol_payload: string) {
+    // symbol payload format:
+    // {
+    //    "ScriptMetadataMethod": [
+    //       {
+    //          "Name": "method name",
+    //          "Address": "0x12345",
+    //          "MethodAddress": "0x34567"
+    //       },
+    //       ...
+    //    ]
+    // }
+    if (symbol_payload.length > 0) {
+      let symbols = ResolvedSymbols.getInstance()
+      let parse = JSON.parse(symbol_payload);
+      let methods: Array<any> = parse.ScriptMetadataMethod;
+      console.log(`Loading ${methods.length} methods from len(symbol_payload)=${symbol_payload.length} ...`)
+      methods.forEach(method => {
+          let offsetAddr = Number(method.Address);
+          let methodAddr = Number(method.MethodAddress) + Number(Il2Cpp.module.base);
+          /*
+          let name = method.Name as string;
+          if (sym.toString(16) == '19a7588') {
+              console.log("0x" + sym.toString(16));
+              console.log("0x" + methodAddr.toString(16));
+              console.log(name);
+          }*/
+          symbols.addSymbol("0x" + offsetAddr.toString(16), "0x" + methodAddr.toString(16));
+      });
+    }
   }
 
   private static bypassSSLPinning() {
@@ -99,14 +131,21 @@ export class Loader {
     });
   }
 
-  private static init() {
+  private static init(bypassEntitlement: boolean) {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
     // To see exceptions:
     // Il2Cpp.installExceptionListener("all");
 
-    Loader.bypassEntitlements();
-    Loader.resolveSymbols();
+    if (bypassEntitlement) {
+      console.log("Adding hook to bypassing entitlement check")
+      Loader.bypassEntitlements();
+    }
+    // Loader.resolveSymbols();
+    if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
+        console.log("Error: Symbols must be loaded into ResolvedSymbols before Loader initialization")
+        throw Error("Symbols must be loaded into ResolvedSymbols before Loader initialization")
+    }
 
     Il2Cpp.domain.assemblies.forEach(assemb => {
       let img = assemb.image;
@@ -363,14 +402,24 @@ export class Loader {
     return sceneCount;
   }
 
-  public static async start() {
-    console.log("Attatching...");
-    // Loader.bypassSSLPinning();
+  public static async start(symbol_payload: string="", bypassEntitlement: boolean=true, bypassSSLPinning: boolean=false) {
+    console.log("Attaching...");
+    if (bypassSSLPinning) {
+      console.log("Adding hook to bypassing SSL Pinning ...")
+      Loader.bypassSSLPinning();
+    }
+    if (symbol_payload != "") {
+      // TODO: remove this support and mandate symbol_payload to be passed as part of init
+      Loader.resolveAllSymbols(symbol_payload);
+    } else {
+      console.log("(Deprecated): waiting for symbols to be posted as frida message ...")
+      Loader.resolveSymbols_deprecated()
+    }
     return Il2Cpp.perform(() => {
       console.log("Performing Il2Cpp");
       try {
         console.log("Loaded Unity version: " + Il2Cpp.unityVersion);
-        return Loader.init();
+        return Loader.init(bypassEntitlement=bypassEntitlement);
       } catch (sse) {
         const u = sse as Error
         console.log(sse);
