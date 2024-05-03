@@ -425,7 +425,7 @@ export class Loader {
         console.log(sse);
         console.error(u.stack);
       }
-    });
+    }, "main"); // running on main thread so this will wait for libil2cpp to load
   }
 }
 

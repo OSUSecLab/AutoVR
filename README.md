@@ -4,24 +4,23 @@ An automated UI and event tester for Unity VR games.
 
 ## Installation
 1. Install the dependencies:
-```
-python >= 3.11
-node >= v20.2.0
-frida == 16.0.19
-adb >= 33.0.3
-```
+   * python >= 3.11
+   * node >= v20.2.0
+   * adb >= 33.0.3
+   * in Python environment, run
+     ```
+     pip install -r requirements.txt
+     ```
+
 2. Install frida 16.0.19 Android ARM64 binaries [[here][1]].
 3. Clone this repository.
 ```
 git clone https://github.com/OSUSecLab/AutoVR.git
 ```
-4. Enter repository directory and run the following commands:
+4. Build AutoVR frida dependencies by:
 ```bash
-cd ts/
-npm install
-./compile.sh
+make
 ```
-5. Exit the compile script ^C.
 
 ## Usage
 

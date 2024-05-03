@@ -267,7 +267,7 @@ stop_event = threading.Event()
 def run_async(script, device, pid, tries, script_file, host, states,
               delay_scenes):
 
-    from py.run import setup_base, count_scenes, run
+    from autovr.run import setup_base, count_scenes, run
     setup_base(script, device, pid, script_file)
 
     loop = asyncio.new_event_loop()
