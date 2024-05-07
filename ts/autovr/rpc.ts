@@ -194,6 +194,7 @@ export class RPC {
     return Loader.loadScene("", scene_index, true);
   }
 
+  /** @deprecated */
   static unloadScene(scene_index: number) {
     RPC.healthCheckCount = 0;
     console.log("unloadScene:")

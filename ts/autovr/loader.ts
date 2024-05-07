@@ -213,6 +213,10 @@ export class Loader {
     }
   }
 
+  /**
+   * @deprecated Loader.getScenes() can fail and may cause undefined behavior
+   *     (usually hangs the promise).
+   */
   public static async unloadScene(sceneName: string, index: number) {
     let instance = Classes.getInstance();
     console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
@@ -253,7 +257,6 @@ export class Loader {
       // console.log("LoadSceneParameters_instance:" +
       //            LoadSceneParameters_instance);
 
-      console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
       return Il2Cpp.mainThread.schedule(() => {
         var ret = null;
         let SceneManager = instance.SceneManager;
@@ -288,6 +291,10 @@ export class Loader {
     }
   }
 
+  /**
+   * @deprecated Loader.getScenes() can fail and may cause undefined behavior.
+   *     This was mainly used for debugging purposes use with caution.
+   */
   public static getScenes(nameOnly: boolean): number[]|null {
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
