@@ -21,7 +21,7 @@
   "scripts": {
     "prepare": "npm run build",
     "build": "tsc --build --verbose",
-    "build-frida": "frida-compile -o ../index.out.js --no-source-maps dist/autovr.js"
+    "build-frida": "frida-compile -o ../index.out.js --no-source-maps ./autovr.ts"
   },
   "author": "",
   "license": "ISC",
