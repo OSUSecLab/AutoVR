@@ -188,7 +188,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
 
         session = device.attach(pid)
         session.on("detached", frida_on_detached)
-        script = session.create_script(open("index.out.js").read())
+        script = session.create_script(open("index.out.js", encoding="utf-8").read())
 
         protocol.set_export_sync(script.exports_sync)
         protocol.set_export_async(script.exports_async)
