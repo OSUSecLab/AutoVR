@@ -1,7 +1,7 @@
 import os
 import pathlib
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import time
 import json
 import subprocess
@@ -587,6 +587,21 @@ async def run(script, package_name, states, delay_scenes):
         collect_metrics(package_name, start_time, curr_scene)
 
 
+class AutoVRMethodMap(dict):
+    """map from Address (0xABCD format) to Method name (a.b.c$$func format)"""
+
+    def __init__(self, *args, **kwargs):
+        super(AutoVRMethodMap, self).__init__(*args, **kwargs)
+
+    def __setitem__(self, key:str, value):
+        if not isinstance(key, str):
+            raise TypeError("Key be in the 0xAddress format")
+        if not isinstance(value, str):
+            raise TypeError("Value must be a string")
+        
+        super(AutoVRMethodMap, self).__setitem__(key, value)
+
+
 class AutoVRResumableFridaApp(ABC):
     """
     Abstration of a launched app instance in suspended state that are resumable,
@@ -599,7 +614,7 @@ class AutoVRResumableFridaApp(ABC):
     device_name: str
 
     @abstractmethod
-    def resume(self) -> None:
+    def resume(self) -> AutoVRMethodMap:
         pass
     
     @abstractmethod
@@ -616,6 +631,7 @@ class AutoVRLaunchableFridaApp(ABC):
     def start_app_suspended(
         self,
         process_detach_event: threading.Event,
+        on_message_callback: Callable[[Dict[str, Any], Any], None],
     ) -> AutoVRResumableFridaApp:
         """Start a process based on the provided package_name and method table.
         The function will create the process in suspended state, and return an
@@ -639,11 +655,7 @@ class AutoVR:
         self._resolved_deps = 0
         self._unity_events = {}
         self._per_event = {}
-        self._methods = {}
-
-    def parse_all_methods(self, all_methods) -> None:
-        for addr, name in all_methods:
-            self._methods[addr] = name
+        self._methods: Optional[AutoVRMethodMap]
 
     def count_scenes(self, app: AutoVRResumableFridaApp, tries: int = 3) -> Optional[int]:
         # Ensure setup() was called beforehand
@@ -920,10 +932,7 @@ class AutoVR:
         try:
 
             # adopted from autovr.py: run_async
-            app.resume()
-            res = json.loads(app.protocol.init())
-            self.parse_all_methods(res["all_methods"])
-
+            self._methods = app.resume()
             states = {"curr_scene": 0, "num_scenes": -1}
 
             loop = asyncio.new_event_loop()

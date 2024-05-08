@@ -7,3 +7,5 @@ from . import mi_builder
 from . import rpc
 from . import run
 from . import run_bypass_all_ssl_pinnings
+
+__version__ = '0.1.0.dev'

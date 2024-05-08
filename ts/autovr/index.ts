@@ -8,7 +8,7 @@ function run_module() {
     rpc.exports = {
         checkHealth() { return RPC.checkHealth(); },
         getUnityVersion() { return RPC.getUnityVersion(); },
-        init() { return RPC.init(); },
+        init(symbol_payload: string, bypassEntitlement: boolean, bypassSSLPinning: boolean) { return RPC.init(symbol_payload=symbol_payload, bypassEntitlement=bypassEntitlement, bypassSSLPinning=bypassSSLPinning); },
         getInstructions(payload) { return RPC.getInstructions(payload); },
         getInstructionsInterval(
             payload) { return RPC.getInstructionsInterval(payload); },
