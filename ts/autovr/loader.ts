@@ -39,12 +39,6 @@ export class Loader {
           let name = method.Name as string;
           let methodAddr =
               Number(method.MethodAddress) + Number(Il2Cpp.module.base);
-          /*
-          if (sym.toString(16) == '19a7588') {
-            console.log("0x" + sym.toString(16));
-            console.log("0x" + methodAddr.toString(16));
-            console.log(name);
-          }*/
           ResolvedSymbols.getInstance().addSymbol(
               "0x" + sym.toString(16), "0x" + methodAddr.toString(16));
         });
@@ -69,18 +63,14 @@ export class Loader {
       let symbols = ResolvedSymbols.getInstance()
       let parse = JSON.parse(symbol_payload);
       let methods: Array<any> = parse.ScriptMetadataMethod;
-      console.log(`Loading ${methods.length} methods from len(symbol_payload)=${symbol_payload.length} ...`)
+      console.log(`Loading ${methods.length} methods from len(symbol_payload)=${
+          symbol_payload.length} ...`)
       methods.forEach(method => {
-          let offsetAddr = Number(method.Address);
-          let methodAddr = Number(method.MethodAddress) + Number(Il2Cpp.module.base);
-          /*
-          let name = method.Name as string;
-          if (sym.toString(16) == '19a7588') {
-              console.log("0x" + sym.toString(16));
-              console.log("0x" + methodAddr.toString(16));
-              console.log(name);
-          }*/
-          symbols.addSymbol("0x" + offsetAddr.toString(16), "0x" + methodAddr.toString(16));
+        let offsetAddr = Number(method.Address);
+        let methodAddr =
+            Number(method.MethodAddress) + Number(Il2Cpp.module.base);
+        symbols.addSymbol("0x" + offsetAddr.toString(16),
+                          "0x" + methodAddr.toString(16));
       });
     }
   }
@@ -142,10 +132,12 @@ export class Loader {
       Loader.bypassEntitlements();
     }
     // Loader.resolveSymbols();
-    if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
-        console.log("Error: Symbols must be loaded into ResolvedSymbols before Loader initialization")
-        throw Error("Symbols must be loaded into ResolvedSymbols before Loader initialization")
-    }
+
+    // if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
+    //     console.log("Error: Symbols must be loaded into ResolvedSymbols
+    //     before Loader initialization") throw Error("Symbols must be loaded
+    //     into ResolvedSymbols before Loader initialization")
+    // }
 
     Il2Cpp.domain.assemblies.forEach(assemb => {
       let img = assemb.image;
@@ -185,7 +177,6 @@ export class Loader {
       });
       let scene = await promise;
       Method_LoadSceneAsyncNameIndexInternal.revert();
-      // console.log(scene, scene.length);
       Loader.revertSceneChange();
 
       // let objects = Il2Cpp.MemorySnapshot.capture().objects;
@@ -366,15 +357,6 @@ export class Loader {
   }
 
   public static async countAllScenes() {
-    // var launcherScenes: string[] = Loader.getScenes(true) as string[];
-    /*
-    let sceneIndicies = Loader.getScenes(false);
-    if (sceneIndicies) {
-      for (let i = 0; i < sceneIndicies.length; i++) {
-        await Loader.unloadScene("", sceneIndicies[i]);
-      }
-    }*/
-
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
       let SceneManager = instance.SceneManager
@@ -402,30 +384,34 @@ export class Loader {
     return sceneCount;
   }
 
-  public static async start(symbol_payload: string, bypassEntitlement: boolean, bypassSSLPinning: boolean) {
+  public static async start(symbol_payload: string, bypassEntitlement: boolean,
+                            bypassSSLPinning: boolean) {
     console.log("Attaching...");
     if (bypassSSLPinning) {
       console.log("Adding hook to bypassing SSL Pinning ...")
       Loader.bypassSSLPinning();
     }
     if (symbol_payload != "") {
-      // TODO: remove this support and mandate symbol_payload to be passed as part of init
+      // TODO: remove this support and mandate symbol_payload to be passed as
+      // part of init
       Loader.resolveAllSymbols(symbol_payload);
     } else {
-      console.log("(Deprecated): waiting for symbols to be posted as frida message ...")
+      console.log(
+          "(Deprecated): waiting for symbols to be posted as frida message ...")
       Loader.resolveSymbols_deprecated()
     }
     return Il2Cpp.perform(() => {
       console.log("Performing Il2Cpp");
       try {
         console.log("Loaded Unity version: " + Il2Cpp.unityVersion);
-        return Loader.init(bypassEntitlement=bypassEntitlement);
+        return Loader.init(bypassEntitlement = bypassEntitlement);
       } catch (sse) {
         const u = sse as Error
         console.log(sse);
         console.error(u.stack);
       }
-    }, "main"); // running on main thread so this will wait for libil2cpp to load
+    }, "main"); // running on main thread so this will wait for libil2cpp to
+                // load
   }
 }
 
