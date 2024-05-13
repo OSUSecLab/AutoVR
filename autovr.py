@@ -71,12 +71,14 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         #  }
         res = json.loads(
             self.protocol.init(
-                symbol_payload=json.dumps(scriptMetadataMethods)))
+                symbol_payload=json.dumps(scriptMetadataMethods),
+                bypassEntitlement=False))
         return AutoVRMethodMap(res["all_methods"])
 
     async def check_health_async(self) -> bool:
+        # TODO: Sometimes UnityEvent parsing can take >1 minutes, we should make this into a user flag.
         try:
-            async with asyncio.timeout(60):
+            async with asyncio.timeout(80):
                 cons_count = await self.protocol.check_health()
                 if cons_count == 10:
                     command = [

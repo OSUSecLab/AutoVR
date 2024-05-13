@@ -124,7 +124,7 @@ export class Loader {
   private static init(bypassEntitlement: boolean) {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
-    // To see exceptions:
+    // To see il2cpp exceptions:
     // Il2Cpp.installExceptionListener("all");
 
     if (bypassEntitlement) {
@@ -150,6 +150,27 @@ export class Loader {
       "all_methods" : AllMethods.getInstance().toEntriesWithName()
     };
     return JSON.stringify(obj);
+  }
+
+  private static async getAllObjects(delay_scenes_ms: number) {
+    // Delay specified time before resolving objects within scene.
+    await wait(delay_scenes_ms);
+    return await Util.getAllActiveObjects();
+  }
+
+  private static async resolveObjects(currentObjects: Il2Cpp.Object[]) {
+    ResolvedObjects.getInstance().clear()
+    ResolvedObjects.getInstance().addComps(currentObjects);
+    let res = {
+      "type" : "objects_per_scene",
+      "scene" : curr_scene,
+      "data" : currentObjects.length
+    };
+    send(JSON.stringify(res));
+
+    eventLoader = new EventLoader(curr_scene);
+    eventTriggerer = new EventTriggerer(curr_scene, eventLoader);
+    return eventLoader.getEventFunctionCallbacks(currentObjects);
   }
 
   public static async loadSceneEvents(scene_index: number,
@@ -179,24 +200,8 @@ export class Loader {
       Method_LoadSceneAsyncNameIndexInternal.revert();
       Loader.revertSceneChange();
 
-      // let objects = Il2Cpp.MemorySnapshot.capture().objects;
-      // APIHooker.hookVRTrackingAPI(curr_scene, objects);
-
-      // Wait for Update() calls on all gameobjects
-      await wait(delay_scenes_ms);
-      let currentObjects = await Util.getAllActiveObjects();
-      ResolvedObjects.getInstance().clear()
-      ResolvedObjects.getInstance().addComps(currentObjects);
-      let res = {
-        "type" : "objects_per_scene",
-        "scene" : curr_scene,
-        "data" : currentObjects.length
-      };
-      send(JSON.stringify(res));
-
-      eventLoader = new EventLoader(curr_scene);
-      eventTriggerer = new EventTriggerer(curr_scene, eventLoader);
-      return eventLoader.getEventFunctionCallbacks(currentObjects);
+      return await Loader.getAllObjects(delay_scenes_ms)
+          .then(currentObjects => Loader.resolveObjects(currentObjects));
     }
   }
 
@@ -284,8 +289,6 @@ export class Loader {
           instance.LoadSceneMode.rawImageClass
               .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
               .value);
-      // console.log("LoadSceneParameters_instance:" +
-      //            LoadSceneParameters_instance);
 
       return Il2Cpp.mainThread.schedule(() => {
         var ret = null;
