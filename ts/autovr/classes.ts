@@ -47,6 +47,7 @@ export class Classes {
   public ISelectHandler: UnityClass|null = null;
   public ISubmitHandler: UnityClass|null = null;
   public IUpdateSelectedHandler: UnityClass|null = null;
+  public IEventHandler: UnityClass|null = null;
 
   /* UI event handlers in array form */
   public EventHandlers: UnityClass[] = [];
@@ -61,6 +62,9 @@ export class Classes {
   public ExecuteEvents: UnityClass|null = null;
   public PointerEventData: UnityClass|null = null;
   public EventSystem: UnityClass|null = null;
+
+  /* UIElement event helpers */
+  public CallbackEventHandler: UnityClass|null = null;
 
   /* Oculus API bridge */
   public CAPI: UnityClass|null = null;

@@ -254,27 +254,32 @@ export class Loader {
    */
   public static async unloadScene(sceneName: string, index: number) {
     let instance = Classes.getInstance();
-    console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
     return await Il2Cpp.mainThread.schedule(() => {
-      let sceneIndicies = Loader.getScenes(false);
-      var sss = Il2Cpp.reference(false);
-      let UnloadSceneOptions = instance.UnloadSceneOptions;
       let SceneManager = instance.SceneManager;
-      if (sceneIndicies && sceneIndicies.includes(index) &&
-          UnloadSceneOptions && SceneManager) {
-        console.log("UNLOAD SCENE", index);
-        let sceneObject =
-            SceneManager.method("GetSceneAt").executeStatic(index) as
-            Il2Cpp.Object;
-        SceneManager.method("UnloadSceneNameIndexInternal")
-            .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""), index,
-                           true,
-                           UnloadSceneOptions.rawImageClass
-                               .field("UnloadAllEmbeddedSceneObjects")
-                               .value,
-                           sss);
+      if (SceneManager) {
+        if (SceneManager.methods.has("UnloadSceneNameIndexInternal")) {
+          let sceneIndicies = Loader.getScenes(false);
+          console.log("BEFORE SCENE_COUNT =", sceneIndicies);
+          var sss = Il2Cpp.reference(false);
+          let UnloadSceneOptions = instance.UnloadSceneOptions;
+          if (sceneIndicies && sceneIndicies.includes(index) &&
+              UnloadSceneOptions && SceneManager) {
+            console.log("UNLOAD SCENE", index);
+            SceneManager.method("UnloadSceneNameIndexInternal")
+                .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""),
+                               index, true,
+                               UnloadSceneOptions.rawImageClass
+                                   .field("UnloadAllEmbeddedSceneObjects")
+                                   .value,
+                               sss);
+          }
+        } else if (SceneManager.methods.has("UnloadSceneAsync")) {
+          let sceneObject =
+              SceneManager.method("GetSceneAt").executeStatic(index) as
+              Il2Cpp.Object;
+          SceneManager.method("UnloadSceneAsync").executeStatic(sceneObject);
+        }
       }
-      console.log("inner AFTER SCENE_COUNT =", Loader.getScenes(false));
     });
   }
 
@@ -416,12 +421,6 @@ export class Loader {
     }, "main"); // running on main thread so this will wait for libil2cpp to
                 // load
   }
-}
-
-interface FieldData {
-  field?: Il2Cpp.Field;
-  subFields: FieldData[];
-  hasUEvent: boolean;
 }
 
 // Map of all method names to method virtual addresses in string format.
@@ -931,6 +930,18 @@ export class ClassLoader {
           img, "UnityEngine.EventSystems.IUpdateSelectedHandler", true);
       if (classes.IUpdateSelectedHandler)
         classes.EventHandlers.push(classes.IUpdateSelectedHandler);
+    }
+    if (classes.IEventHandler == null) {
+      classes.IEventHandler = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.UIElements.IEventLoader", true);
+      if (classes.IEventHandler)
+        classes.EventHandlers.push(classes.IEventHandler);
+    }
+    if (classes.CallbackEventHandler == null) {
+      // TODO(Jkim-Hack): Looks like this class implements IEventHandler which
+      // also handles TextInput events. Add support for TextInput events.
+      classes.CallbackEventHandler = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.UIElements.CallbackEventHandler", true);
     }
     if (classes.Message == null) {
       classes.Message = ClassLoader.resolveClass<UnityClass>(

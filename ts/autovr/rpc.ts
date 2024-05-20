@@ -222,10 +222,13 @@ export class RPC {
     return nextEvents;
   }
 
-  static init(symbol_payload: string, bypassEntitlement: boolean, bypassSSLPinning: boolean) {
+  static init(symbol_payload: string, bypassEntitlement: boolean,
+              bypassSSLPinning: boolean) {
     RPC.healthCheckCount = 0;
     console.log(`init: len(symbol_payload)=${symbol_payload.length}`);
-    return Loader.start(symbol_payload=symbol_payload, bypassEntitlement=bypassEntitlement, bypassSSLPinning=bypassSSLPinning);
+    return Loader.start(symbol_payload = symbol_payload,
+                        bypassEntitlement = bypassEntitlement,
+                        bypassSSLPinning = bypassSSLPinning);
   }
 }
 
