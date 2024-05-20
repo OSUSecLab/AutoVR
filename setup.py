@@ -8,5 +8,5 @@ setup(
 
     url='https://github.com/OSUSecLab/AutoVR',
     author='OSUSecLab',
-    package_dir = {'': 'autovr'},
+    package_dir = {'autovr': 'autovr'},
 )
