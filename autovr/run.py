@@ -859,7 +859,7 @@ class AutoVR:
             paths = await self.trigger_events_path(app, event_graph.scene_node,
                                                    event_graph, detach_event)
             all_events |= set(paths)
-            while paths and not detach_event.is_set():
+            while paths and (detach_event is None or not detach_event.is_set()):
                 # TODO(Jkim-Hack): Seems like we can do something with unloading scenes instead of restarting the game.
                 # app.protocol.unload_scene(curr_scene)
                 next_events = set(
