@@ -712,7 +712,8 @@ class AutoVR:
 
     async def trigger_events_path(self, app: AutoVRResumableFridaApp,
                                   starting_node: EventNode,
-                                  event_graph: EventGraph):
+                                  event_graph: EventGraph,
+                                  detach_event: Optional[asyncio.Event] = None):
         total_paths = []
         event_path = event_graph.findNextPath(starting_node)
         sequence = []
@@ -731,6 +732,10 @@ class AutoVR:
                                                    sequence)
             event_node.markTriggered()
 
+            if detach_event is not None and detach_event.is_set():
+                logger.info("Detach event set, returning")
+                return total_paths
+
             logger.info(" ".join(next_events))
             for next_event in next_events:
                 next_event_node = EventNode(next_event, event_node)
@@ -739,7 +744,7 @@ class AutoVR:
             event_graph.addCompletedEventNode(event_node)
             if len(event_node.children) > 0:
                 apath = await self.trigger_events_path(app, event_node,
-                                                       event_graph)
+                                                       event_graph, detach_event)
                 if apath is not None:
                     total_paths += apath
 
@@ -832,6 +837,7 @@ class AutoVR:
         start_time: float,
         states,
         delay_scenes: int,
+        detach_event: Optional[asyncio.Event] = None,
     ):
         try:
             states["curr_scene"] = curr_scene
@@ -851,9 +857,9 @@ class AutoVR:
 
             logger.info(f"event_graph {event_graph}")
             paths = await self.trigger_events_path(app, event_graph.scene_node,
-                                                   event_graph)
+                                                   event_graph, detach_event)
             all_events |= set(paths)
-            while paths:
+            while paths and not detach_event.is_set():
                 # TODO(Jkim-Hack): Seems like we can do something with unloading scenes instead of restarting the game.
                 # app.protocol.unload_scene(curr_scene)
                 next_events = set(
@@ -863,7 +869,7 @@ class AutoVR:
                     break
                 paths = await self.trigger_events_path(app,
                                                        event_graph.scene_node,
-                                                       event_graph)
+                                                       event_graph, detach_event)
                 if paths is not None:
                     all_events |= set(paths)
 
@@ -924,7 +930,7 @@ class AutoVR:
             logger.info(f"Triggers: {self._triggers[curr_scene]}")
 
     async def _arun(self, app: AutoVRResumableFridaApp, states: Dict[str, Any],
-                    delay_scenes: int):
+                    delay_scenes: int, detach_event: Optional[asyncio.Event] = None):
 
         num_scenes = states["num_scenes"]
         start_scene = states["curr_scene"]
@@ -933,9 +939,12 @@ class AutoVR:
 
         logger.info(f"Total number of scenes: {num_scenes}")
         for curr_scene in range(start_scene, num_scenes):
+            if detach_event is not None and detach_event.is_set():
+                logger.info("Detaching...")
+                return
             logger.info(f"curr_scene={curr_scene}")
             if not (await self.start(app, curr_scene, start_time, states,
-                                     delay_scenes)):
+                                     delay_scenes, detach_event)):
                 continue
             states["curr_scene"] = curr_scene
             self.collect_metrics(app.package_name, start_time, curr_scene)
@@ -945,6 +954,7 @@ class AutoVR:
         app: AutoVRResumableFridaApp,
         states: Dict[str, Any],
         delay_scenes: int,
+        detach_event: Optional[threading.Event] = None,
     ):
         logger.info("Starting autovr:run ...")
         try:
@@ -961,7 +971,16 @@ class AutoVR:
                 states["num_scenes"] = self.count_scenes(app) or 0
 
             logger.info(f"Running {app.package_name}, pid={app.pid}")
-            loop.run_until_complete(self._arun(app, states, delay_scenes))
+            detach_async_event = asyncio.Event() if detach_event is not None else None
+            thread = threading.Thread(
+                target=loop.run_until_complete,
+                args=[self._arun(app, states, delay_scenes, detach_async_event)]
+            )
+            thread.start()
+            if detach_event is not None:
+                detach_event.wait()
+                detach_async_event.set()
+            thread.join()
             loop.close()
             logger.info(f"FINISHED: {app.package_name}, pid={app.pid}")
 
