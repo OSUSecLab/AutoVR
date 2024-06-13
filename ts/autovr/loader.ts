@@ -39,12 +39,6 @@ export class Loader {
           let name = method.Name as string;
           let methodAddr =
               Number(method.MethodAddress) + Number(Il2Cpp.module.base);
-          /*
-          if (sym.toString(16) == '19a7588') {
-            console.log("0x" + sym.toString(16));
-            console.log("0x" + methodAddr.toString(16));
-            console.log(name);
-          }*/
           ResolvedSymbols.getInstance().addSymbol(
               "0x" + sym.toString(16), "0x" + methodAddr.toString(16));
         });
@@ -69,18 +63,14 @@ export class Loader {
       let symbols = ResolvedSymbols.getInstance()
       let parse = JSON.parse(symbol_payload);
       let methods: Array<any> = parse.ScriptMetadataMethod;
-      console.log(`Loading ${methods.length} methods from len(symbol_payload)=${symbol_payload.length} ...`)
+      console.log(`Loading ${methods.length} methods from len(symbol_payload)=${
+          symbol_payload.length} ...`)
       methods.forEach(method => {
-          let offsetAddr = Number(method.Address);
-          let methodAddr = Number(method.MethodAddress) + Number(Il2Cpp.module.base);
-          /*
-          let name = method.Name as string;
-          if (sym.toString(16) == '19a7588') {
-              console.log("0x" + sym.toString(16));
-              console.log("0x" + methodAddr.toString(16));
-              console.log(name);
-          }*/
-          symbols.addSymbol("0x" + offsetAddr.toString(16), "0x" + methodAddr.toString(16));
+        let offsetAddr = Number(method.Address);
+        let methodAddr =
+            Number(method.MethodAddress) + Number(Il2Cpp.module.base);
+        symbols.addSymbol("0x" + offsetAddr.toString(16),
+                          "0x" + methodAddr.toString(16));
       });
     }
   }
@@ -134,7 +124,7 @@ export class Loader {
   private static init(bypassEntitlement: boolean) {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
-    // To see exceptions:
+    // To see il2cpp exceptions:
     // Il2Cpp.installExceptionListener("all");
 
     if (bypassEntitlement) {
@@ -142,10 +132,12 @@ export class Loader {
       Loader.bypassEntitlements();
     }
     // Loader.resolveSymbols();
-    if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
-        console.log("Error: Symbols must be loaded into ResolvedSymbols before Loader initialization")
-        throw Error("Symbols must be loaded into ResolvedSymbols before Loader initialization")
-    }
+
+    // if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
+    //     console.log("Error: Symbols must be loaded into ResolvedSymbols
+    //     before Loader initialization") throw Error("Symbols must be loaded
+    //     into ResolvedSymbols before Loader initialization")
+    // }
 
     Il2Cpp.domain.assemblies.forEach(assemb => {
       let img = assemb.image;
@@ -158,6 +150,27 @@ export class Loader {
       "all_methods" : AllMethods.getInstance().toEntriesWithName()
     };
     return JSON.stringify(obj);
+  }
+
+  private static async getAllObjects(delay_scenes_ms: number) {
+    // Delay specified time before resolving objects within scene.
+    await wait(delay_scenes_ms);
+    return await Util.getAllActiveObjects();
+  }
+
+  private static async resolveObjects(currentObjects: Il2Cpp.Object[]) {
+    ResolvedObjects.getInstance().clear()
+    ResolvedObjects.getInstance().addComps(currentObjects);
+    let res = {
+      "type" : "objects_per_scene",
+      "scene" : curr_scene,
+      "data" : currentObjects.length
+    };
+    send(JSON.stringify(res));
+
+    eventLoader = new EventLoader(curr_scene);
+    eventTriggerer = new EventTriggerer(curr_scene, eventLoader);
+    return eventLoader.getEventFunctionCallbacks(currentObjects);
   }
 
   public static async loadSceneEvents(scene_index: number,
@@ -185,27 +198,10 @@ export class Loader {
       });
       let scene = await promise;
       Method_LoadSceneAsyncNameIndexInternal.revert();
-      // console.log(scene, scene.length);
       Loader.revertSceneChange();
 
-      // let objects = Il2Cpp.MemorySnapshot.capture().objects;
-      // APIHooker.hookVRTrackingAPI(curr_scene, objects);
-
-      // Wait for Update() calls on all gameobjects
-      await wait(delay_scenes_ms);
-      let currentObjects = await Util.getAllActiveObjects();
-      ResolvedObjects.getInstance().clear()
-      ResolvedObjects.getInstance().addComps(currentObjects);
-      let res = {
-        "type" : "objects_per_scene",
-        "scene" : curr_scene,
-        "data" : currentObjects.length
-      };
-      send(JSON.stringify(res));
-
-      eventLoader = new EventLoader(curr_scene);
-      eventTriggerer = new EventTriggerer(curr_scene, eventLoader);
-      return eventLoader.getEventFunctionCallbacks(currentObjects);
+      return await Loader.getAllObjects(delay_scenes_ms)
+          .then(currentObjects => Loader.resolveObjects(currentObjects));
     }
   }
 
@@ -258,27 +254,32 @@ export class Loader {
    */
   public static async unloadScene(sceneName: string, index: number) {
     let instance = Classes.getInstance();
-    console.log("BEFORE SCENE_COUNT =", Loader.getScenes(false));
     return await Il2Cpp.mainThread.schedule(() => {
-      let sceneIndicies = Loader.getScenes(false);
-      var sss = Il2Cpp.reference(false);
-      let UnloadSceneOptions = instance.UnloadSceneOptions;
       let SceneManager = instance.SceneManager;
-      if (sceneIndicies && sceneIndicies.includes(index) &&
-          UnloadSceneOptions && SceneManager) {
-        console.log("UNLOAD SCENE", index);
-        let sceneObject =
-            SceneManager.method("GetSceneAt").executeStatic(index) as
-            Il2Cpp.Object;
-        SceneManager.method("UnloadSceneNameIndexInternal")
-            .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""), index,
-                           true,
-                           UnloadSceneOptions.rawImageClass
-                               .field("UnloadAllEmbeddedSceneObjects")
-                               .value,
-                           sss);
+      if (SceneManager) {
+        if (SceneManager.methods.has("UnloadSceneNameIndexInternal")) {
+          let sceneIndicies = Loader.getScenes(false);
+          console.log("BEFORE SCENE_COUNT =", sceneIndicies);
+          var sss = Il2Cpp.reference(false);
+          let UnloadSceneOptions = instance.UnloadSceneOptions;
+          if (sceneIndicies && sceneIndicies.includes(index) &&
+              UnloadSceneOptions && SceneManager) {
+            console.log("UNLOAD SCENE", index);
+            SceneManager.method("UnloadSceneNameIndexInternal")
+                .executeStatic(Il2Cpp.string(index == -1 ? sceneName : ""),
+                               index, true,
+                               UnloadSceneOptions.rawImageClass
+                                   .field("UnloadAllEmbeddedSceneObjects")
+                                   .value,
+                               sss);
+          }
+        } else if (SceneManager.methods.has("UnloadSceneAsync")) {
+          let sceneObject =
+              SceneManager.method("GetSceneAt").executeStatic(index) as
+              Il2Cpp.Object;
+          SceneManager.method("UnloadSceneAsync").executeStatic(sceneObject);
+        }
       }
-      console.log("inner AFTER SCENE_COUNT =", Loader.getScenes(false));
     });
   }
 
@@ -293,8 +294,6 @@ export class Loader {
           instance.LoadSceneMode.rawImageClass
               .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
               .value);
-      // console.log("LoadSceneParameters_instance:" +
-      //            LoadSceneParameters_instance);
 
       return Il2Cpp.mainThread.schedule(() => {
         var ret = null;
@@ -366,15 +365,6 @@ export class Loader {
   }
 
   public static async countAllScenes() {
-    // var launcherScenes: string[] = Loader.getScenes(true) as string[];
-    /*
-    let sceneIndicies = Loader.getScenes(false);
-    if (sceneIndicies) {
-      for (let i = 0; i < sceneIndicies.length; i++) {
-        await Loader.unloadScene("", sceneIndicies[i]);
-      }
-    }*/
-
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
       let SceneManager = instance.SceneManager
@@ -402,37 +392,35 @@ export class Loader {
     return sceneCount;
   }
 
-  public static async start(symbol_payload: string, bypassEntitlement: boolean, bypassSSLPinning: boolean) {
+  public static async start(symbol_payload: string, bypassEntitlement: boolean,
+                            bypassSSLPinning: boolean) {
     console.log("Attaching...");
     if (bypassSSLPinning) {
       console.log("Adding hook to bypassing SSL Pinning ...")
       Loader.bypassSSLPinning();
     }
     if (symbol_payload != "") {
-      // TODO: remove this support and mandate symbol_payload to be passed as part of init
+      // TODO: remove this support and mandate symbol_payload to be passed as
+      // part of init
       Loader.resolveAllSymbols(symbol_payload);
     } else {
-      console.log("(Deprecated): waiting for symbols to be posted as frida message ...")
+      console.log(
+          "(Deprecated): waiting for symbols to be posted as frida message ...")
       Loader.resolveSymbols_deprecated()
     }
     return Il2Cpp.perform(() => {
       console.log("Performing Il2Cpp");
       try {
         console.log("Loaded Unity version: " + Il2Cpp.unityVersion);
-        return Loader.init(bypassEntitlement=bypassEntitlement);
+        return Loader.init(bypassEntitlement = bypassEntitlement);
       } catch (sse) {
         const u = sse as Error
         console.log(sse);
         console.error(u.stack);
       }
-    }, "main"); // running on main thread so this will wait for libil2cpp to load
+    }, "main"); // running on main thread so this will wait for libil2cpp to
+                // load
   }
-}
-
-interface FieldData {
-  field?: Il2Cpp.Field;
-  subFields: FieldData[];
-  hasUEvent: boolean;
 }
 
 // Map of all method names to method virtual addresses in string format.
@@ -942,6 +930,18 @@ export class ClassLoader {
           img, "UnityEngine.EventSystems.IUpdateSelectedHandler", true);
       if (classes.IUpdateSelectedHandler)
         classes.EventHandlers.push(classes.IUpdateSelectedHandler);
+    }
+    if (classes.IEventHandler == null) {
+      classes.IEventHandler = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.UIElements.IEventLoader", true);
+      if (classes.IEventHandler)
+        classes.EventHandlers.push(classes.IEventHandler);
+    }
+    if (classes.CallbackEventHandler == null) {
+      // TODO(Jkim-Hack): Looks like this class implements IEventHandler which
+      // also handles TextInput events. Add support for TextInput events.
+      classes.CallbackEventHandler = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.UIElements.CallbackEventHandler", true);
     }
     if (classes.Message == null) {
       classes.Message = ClassLoader.resolveClass<UnityClass>(

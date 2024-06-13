@@ -9,6 +9,7 @@ dist/autovr-*-any.whl:
 
 clean:
 	cd ts && $(MAKE) clean
+	rm -rf build
 	rm -rf dist
 
 .DEFAULT_GOAL := dist

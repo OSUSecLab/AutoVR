@@ -21,11 +21,15 @@ from .mi_builder import *
 
 logger = logging.getLogger(__name__)
 
+
 def deprecated(message):
+
     def deprecated_decorator(func):
+
         def deprecated_func(*args, **kwargs):
             warnings.warn(
-                "{} is a deprecated function. {}".format(func.__name__, message),
+                "{} is a deprecated function. {}".format(
+                    func.__name__, message),
                 category=DeprecationWarning,
                 stacklevel=2,
             )
@@ -39,7 +43,8 @@ def deprecated(message):
 
 protocol = RPC()  # deprecated
 target_methods = ["LoadSceneAsync"]  # deprecated
-blacklist = ["Object", "IntPtr", "StringBuilder", "String", "Number"]  # deprecated
+blacklist = ["Object", "IntPtr", "StringBuilder", "String",
+             "Number"]  # deprecated
 
 _methods = {}  # deprecated
 # _blacklist = []  # deprecated: no one use it
@@ -96,23 +101,23 @@ def on_message(message, data):
                 pb = PayloadBuilder()
                 pb.add_mi(event, _resolved)
                 data.append(pb.data)
-            
+
             # TODO: this doesn't work
             # script.post({'type': 'targets', 'payload': json.dumps(data)})
             raise RuntimeError("should not reach here yet")
-            
+
         elif payload["type"] == "events_to_analyze":
             events = payload["data"]
             events_trigger = analyze_events(events)
-            
+
             # TODO: this doesn't work
-            
+
             # script.post({
             #    'type': 'events_to_analyze',
             #    'payload': json.dumps(events_trigger)
             #})
             raise RuntimeError("should not reach here yet")
-            
+
         elif payload["type"] == "leaks":
             js = payload["data"]
             curr_scene = payload["scene"]
@@ -189,7 +194,7 @@ def parse_events(events):
 #         #    print(name)
 #         builder = MethodInstructionsBuilder(name, protocol, True, _methods,
 #                                             _resolved, _resolving)
-        
+
 #         for ins_meta in ins_list:
 #             builder.add_instruction(Instruction(ins_meta))
 #         _resolved[addr] = builder.build_and_clear()
@@ -593,12 +598,12 @@ class AutoVRMethodMap(dict):
     def __init__(self, *args, **kwargs):
         super(AutoVRMethodMap, self).__init__(*args, **kwargs)
 
-    def __setitem__(self, key:str, value):
+    def __setitem__(self, key: str, value):
         if not isinstance(key, str):
             raise TypeError("Key be in the 0xAddress format")
         if not isinstance(value, str):
             raise TypeError("Value must be a string")
-        
+
         super(AutoVRMethodMap, self).__setitem__(key, value)
 
 
@@ -616,7 +621,7 @@ class AutoVRResumableFridaApp(ABC):
     @abstractmethod
     def resume(self) -> AutoVRMethodMap:
         pass
-    
+
     @abstractmethod
     async def check_health_async(self) -> bool:
         pass
@@ -640,8 +645,6 @@ class AutoVRLaunchableFridaApp(ABC):
         pass
 
 
-
-
 class AutoVR:
 
     def __init__(self) -> None:
@@ -657,7 +660,9 @@ class AutoVR:
         self._per_event = {}
         self._methods: Optional[AutoVRMethodMap]
 
-    def count_scenes(self, app: AutoVRResumableFridaApp, tries: int = 3) -> Optional[int]:
+    def count_scenes(self,
+                     app: AutoVRResumableFridaApp,
+                     tries: int = 3) -> Optional[int]:
         # Ensure setup() was called beforehand
         count = 0
         num_scenes = None
@@ -691,21 +696,24 @@ class AutoVR:
 
         return (events_trigger, branch_count)
 
-    async def trigger_event(
-        self, app: AutoVRResumableFridaApp, event: str, seq: List[str]
-    ) -> List[str]:
+    async def trigger_event(self, app: AutoVRResumableFridaApp, event: str,
+                            seq: List[str]) -> List[str]:
         try:
             return await asyncio.wait_for(
-                app.protocol.trigger_event({"event": event, "sequence": seq}),
+                app.protocol.trigger_event({
+                    "event": event,
+                    "sequence": seq
+                }),
                 timeout=60,
             )
         except asyncio.TimeoutError:
             logger.info("Timeout occurred, skipping")
             return []
 
-    async def trigger_events_path(
-        self, app: AutoVRResumableFridaApp, starting_node: EventNode, event_graph: EventGraph
-    ):
+    async def trigger_events_path(self, app: AutoVRResumableFridaApp,
+                                  starting_node: EventNode,
+                                  event_graph: EventGraph,
+                                  detach_event: Optional[asyncio.Event] = None):
         total_paths = []
         event_path = event_graph.findNextPath(starting_node)
         sequence = []
@@ -720,8 +728,13 @@ class AutoVR:
                 sequence.append(event_node.event_name)
                 continue
 
-            next_events = await self.trigger_event(app, event_node.event_name, sequence)
+            next_events = await self.trigger_event(app, event_node.event_name,
+                                                   sequence)
             event_node.markTriggered()
+
+            if detach_event is not None and detach_event.is_set():
+                logger.info("Detach event set, returning")
+                return total_paths
 
             logger.info(" ".join(next_events))
             for next_event in next_events:
@@ -730,8 +743,10 @@ class AutoVR:
 
             event_graph.addCompletedEventNode(event_node)
             if len(event_node.children) > 0:
-                apath = await self.trigger_events_path(app, event_node, event_graph)
-                total_paths += apath
+                apath = await self.trigger_events_path(app, event_node,
+                                                       event_graph, detach_event)
+                if apath is not None:
+                    total_paths += apath
 
             # event_node may now have visited all nodes, update.
             event_node.updateVisited()
@@ -799,7 +814,11 @@ class AutoVR:
                 callbacks = payload["callbacks"]
                 failed = payload["failed"]
                 logger.info(payload)
-                d = {"objects": objects, "callbacks": callbacks, "failed": failed}
+                d = {
+                    "objects": objects,
+                    "callbacks": callbacks,
+                    "failed": failed
+                }
                 self._unity_events[curr_scene] = d.copy()
                 logger.info(self._unity_events)
             elif payload["type"] == "efc_per_event":
@@ -818,6 +837,7 @@ class AutoVR:
         start_time: float,
         states,
         delay_scenes: int,
+        detach_event: Optional[asyncio.Event] = None,
     ):
         try:
             states["curr_scene"] = curr_scene
@@ -825,28 +845,31 @@ class AutoVR:
 
             # Delay so all objects can load once the scene is loaded.
             # time.sleep(delay_scenes)
-            init_events = app.protocol.load_scene_events(curr_scene, delay_scenes)
+            init_events = app.protocol.load_scene_events(
+                curr_scene, delay_scenes)
 
             all_events = set()
 
             event_graph = EventGraph(curr_scene, init_events)
             (events_trigger, inital_branch_count) = self.analyze_events(
-                init_events, event_graph.scene_node, event_graph
-            )
+                init_events, event_graph.scene_node, event_graph)
             logger.info(events_trigger)
 
             logger.info(f"event_graph {event_graph}")
-            paths = await self.trigger_events_path(
-                app, event_graph.scene_node, event_graph
-            )
+            paths = await self.trigger_events_path(app, event_graph.scene_node,
+                                                   event_graph, detach_event)
             all_events |= set(paths)
-            while paths is not None:
-                next_events = app.protocol.load_scene_events(curr_scene, delay_scenes)
+            while paths and (detach_event is None or not detach_event.is_set()):
+                # TODO(Jkim-Hack): Seems like we can do something with unloading scenes instead of restarting the game.
+                # app.protocol.unload_scene(curr_scene)
+                next_events = set(
+                    app.protocol.load_scene_events(curr_scene, delay_scenes))
+                logger.info(f"next_events: {next_events}")
                 if len(next_events) < 1:
                     break
-                paths = await self.trigger_events_path(
-                    app, event_graph.scene_node, event_graph
-                )
+                paths = await self.trigger_events_path(app,
+                                                       event_graph.scene_node,
+                                                       event_graph, detach_event)
                 if paths is not None:
                     all_events |= set(paths)
 
@@ -858,7 +881,7 @@ class AutoVR:
         except Exception as err:
             logger.warning("run.py:", exc_info=err)
             return False
-        
+
     def print_results(self, package_name: str, scene: str, time: float):
         dicts = {
             "leaks": self._leaks[scene],
@@ -870,14 +893,14 @@ class AutoVR:
             "unityevents": self._unity_events[scene],
             "efc_per_event": self._per_event[scene],
         }
-        
+
         def json_serializer(obj):
             if isinstance(obj, set):
                 return list(obj)
             return str(obj)
 
         # Loop through the dictionaries and write each one to a separate file
-        pathlib.Path('./data').mkdir(parents=True, exist_ok=True) 
+        pathlib.Path('./data').mkdir(parents=True, exist_ok=True)
         for name, dictionary in dicts.items():
             # Open a new file with a filename based on the dictionary name
             with open(f"./data/{package_name}_{name}_{scene}.json", "w") as f:
@@ -890,12 +913,15 @@ class AutoVR:
             # use the json.dump method to write the dictionary to the file in json format
             json.dump(str(time), f)
 
-    def collect_metrics(self, package_name: str, start_time: float, curr_scene):
+    def collect_metrics(self, package_name: str, start_time: float,
+                        curr_scene):
         end_time = time.time()
         self.print_results(package_name, curr_scene, end_time - start_time)
 
         logger.info(f"Time taken: {end_time - start_time}")
-        logger.info(f"Scene: {curr_scene} | Objects: {self._objects_scene[curr_scene]}")
+        logger.info(
+            f"Scene: {curr_scene} | Objects: {self._objects_scene[curr_scene]}"
+        )
         if curr_scene in self._per_event:
             logger.info(f"Events: {self._per_event[curr_scene]}")
         if curr_scene in self._collisions:
@@ -903,9 +929,8 @@ class AutoVR:
         if curr_scene in self._triggers:
             logger.info(f"Triggers: {self._triggers[curr_scene]}")
 
-    async def _arun(
-        self, app: AutoVRResumableFridaApp, states: Dict[str, Any], delay_scenes: int
-    ):
+    async def _arun(self, app: AutoVRResumableFridaApp, states: Dict[str, Any],
+                    delay_scenes: int, detach_event: Optional[asyncio.Event] = None):
 
         num_scenes = states["num_scenes"]
         start_scene = states["curr_scene"]
@@ -914,10 +939,12 @@ class AutoVR:
 
         logger.info(f"Total number of scenes: {num_scenes}")
         for curr_scene in range(start_scene, num_scenes):
+            if detach_event is not None and detach_event.is_set():
+                logger.info("Detaching...")
+                return
             logger.info(f"curr_scene={curr_scene}")
-            if not (
-                await self.start(app, curr_scene, start_time, states, delay_scenes)
-            ):
+            if not (await self.start(app, curr_scene, start_time, states,
+                                     delay_scenes, detach_event)):
                 continue
             states["curr_scene"] = curr_scene
             self.collect_metrics(app.package_name, start_time, curr_scene)
@@ -927,6 +954,7 @@ class AutoVR:
         app: AutoVRResumableFridaApp,
         states: Dict[str, Any],
         delay_scenes: int,
+        detach_event: Optional[threading.Event] = None,
     ):
         logger.info("Starting autovr:run ...")
         try:
@@ -943,16 +971,21 @@ class AutoVR:
                 states["num_scenes"] = self.count_scenes(app) or 0
 
             logger.info(f"Running {app.package_name}, pid={app.pid}")
-            loop.run_until_complete(self._arun(app, states, delay_scenes))
+            detach_async_event = asyncio.Event() if detach_event is not None else None
+            thread = threading.Thread(
+                target=loop.run_until_complete,
+                args=[self._arun(app, states, delay_scenes, detach_async_event)]
+            )
+            thread.start()
+            if detach_event is not None:
+                detach_event.wait()
+                detach_async_event.set()
+            thread.join()
             loop.close()
             logger.info(f"FINISHED: {app.package_name}, pid={app.pid}")
 
         except Exception as e:
             logger.warning("AutoVR:run:", exc_info=e)
-            
-            
-    def check(
-        self,
-        app: AutoVRResumableFridaApp
-    ) -> Any:
+
+    def check(self, app: AutoVRResumableFridaApp) -> Any:
         return app.protocol.check_health()

@@ -21,7 +21,10 @@ class RPC:
     def set_export_sync(self, exports):
         self.exports_sync = exports
 
-    def init(self, symbol_payload: str="", bypassEntitlement: bool=True, bypassSSLPinning: bool=False):
+    def init(self,
+             symbol_payload: str = "",
+             bypassEntitlement: bool = True,
+             bypassSSLPinning: bool = False):
         """
         symbol payload format is a json string:
         {
@@ -35,7 +38,8 @@ class RPC:
            ]
         }
         """
-        return self.exports_sync.init(symbol_payload, bypassEntitlement, bypassSSLPinning)
+        return self.exports_sync.init(symbol_payload, bypassEntitlement,
+                                      bypassSSLPinning)
 
     def check_health(self):
         return self.exports_async.check_health()
@@ -80,6 +84,9 @@ class RPC:
     # events = a Map<string, string[]>. key = event addr, value = sequence of methods to execute.
     async def trigger_all_events(self, events):
         return await self.exports_async.trigger_all_events(json.dumps(events))
+
+    def unload_scene(self, index):
+        return self.exports_sync.unload_scene(index)
 
     def get_all_methods(self):
         return self.exports_sync.get_all_methods()

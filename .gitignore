@@ -163,3 +163,6 @@ ts/node_modules/
 index.out.js
 data/
 autovr-ts-*.tgz
+
+# annoying mac files
+*.DS_Store

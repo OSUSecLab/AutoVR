@@ -16,13 +16,14 @@ from frida.core import Script
 from autovr.run import AutoVR, AutoVRMethodMap, AutoVRResumableFridaApp, AutoVRLaunchableFridaApp
 from autovr.rpc import RPC
 
-
 logging.basicConfig(
     level=logging.DEBUG,
-    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+    format=
+    "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
     datefmt="%d/%b/%Y %H:%M:%S")
-    
+
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Status:
@@ -32,6 +33,7 @@ class Status:
 
 class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
     """Implmementation of AutoVRResumableFridaApp to implement the actual Frida controlled app launch instance"""
+
     def __init__(
         self,
         device: Any,
@@ -52,10 +54,13 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
 
     def resume(self) -> AutoVRMethodMap:
         self.device.resume(self.pid)
-        
-        scriptMetadataMethods = {
-            "ScriptMetadataMethod": self.il2cpp_script_json["ScriptMetadataMethod"]
-        }
+
+        scriptMetadataMethods = {"ScriptMetadataMethod": []}
+        if self.il2cpp_script_json and "ScriptMetadataMethod" in self.il2cpp_script_json:
+            scriptMetadataMethods = {
+                "ScriptMetadataMethod":
+                self.il2cpp_script_json["ScriptMetadataMethod"]
+            }
 
         # init rpc protocol. it returns a json format
         #  {
@@ -65,18 +70,20 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         #     ]
         #  }
         res = json.loads(
-            self.protocol.init(symbol_payload=json.dumps(scriptMetadataMethods))
-        )
+            self.protocol.init(
+                symbol_payload=json.dumps(scriptMetadataMethods),
+                bypassEntitlement=False))
         return AutoVRMethodMap(res["all_methods"])
-        
+
     async def check_health_async(self) -> bool:
+        # TODO: Sometimes UnityEvent parsing can take >1 minutes, we should make this into a user flag.
         try:
-            async with asyncio.timeout(60):
+            async with asyncio.timeout(80):
                 cons_count = await self.protocol.check_health()
                 if cons_count == 10:
                     command = [
-                        'adb', '-s', self.device_name, 'shell', 'input', 'keyevent',
-                        '26'
+                        'adb', '-s', self.device_name, 'shell', 'input',
+                        'keyevent', '26'
                     ]
                     subprocess.run(command)
                     time.sleep(2)
@@ -92,7 +99,7 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
             logger.warning("Health check failed with exception", exc_info=e)
             return False
 
-    
+
 class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
     """
     Implementation of AutoVRFridaProvider to implement the actual
@@ -100,12 +107,12 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
     """
 
     def __init__(
-        self, 
+        self,
         device_name: str,
         package_name: str,
         il2cpp_script_json: Dict[str, Any],
         rooted: bool = False,
-        ssl_offset: str ='',
+        ssl_offset: str = '',
         use_mbed_tls: bool = True,
     ) -> None:
         self.device_name = device_name
@@ -114,7 +121,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         self.ssl_offset = ssl_offset
         self.use_mbed_tls = use_mbed_tls
         self.il2cpp_script_json = il2cpp_script_json
-        
+
     # originally from run.py: _process_pids
     def _process_pids(self, pids: List[str]):
         final = dict()
@@ -124,18 +131,17 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
                 process_id, name = pid_entry.split('  ', 1)
                 final[name] = process_id
         return final
-    
+
     # originally from run.py: frida-ps_list
     def _frida_ps_list(self, device_name: str):
         command = ['frida-ps', '-D', device_name]
         process = subprocess.Popen(command,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
         out, err = process.communicate()
         pids = out.decode("utf-8").split("\n")[2:]
         pids = self._process_pids(pids)
         return pids
-
 
     # originally from run.py: find_package_pid
     def _find_package_pid(self, package: str, device_name: str, rooted=False):
@@ -147,10 +153,10 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             return int(pids[package])
         return -1
 
-
     # originally from run.py: frida_kill
     def frida_kill(self, package_name: str):
-        pid = self._find_package_pid(package_name, self.device_name, self.rooted)
+        pid = self._find_package_pid(package_name, self.device_name,
+                                     self.rooted)
         command = ['frida-kill', '-D', self.device_name, 'Gadget']
         if self.rooted and pid != -1:
             command = ['frida-kill', '-D', self.device_name, f"{pid}"]
@@ -161,7 +167,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             process.wait(3)
         except:
             return
-        
+
     def _run_check_errors(self, cmd):
         proc = subprocess.Popen(cmd.split(),
                                 stdout=subprocess.PIPE,
@@ -196,7 +202,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
                 f"Process {pid} is detached due to: {reason} {crash if crash else ''}"
             )
             process_detach_event.set()
-                
+
         #if not spawn_package(device_name, host):
         #    return (None, None, None)
         #gadget = "re.frida.Gadget"
@@ -206,13 +212,13 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
 
         session = device.attach(pid)
         session.on("detached", frida_on_detached)
-        script = session.create_script(open("ts/index.out.js", newline='\n', encoding="utf-8").read())
+        script = session.create_script(
+            open("ts/index.out.js", newline='\n', encoding="utf-8").read())
 
         protocol.set_export_sync(script.exports_sync)
         protocol.set_export_async(script.exports_async)
         script.load()
         script.on('message', on_message)
-        
 
         if ssl_offset != '':
             self._setup_ssl_pin_offset(script, ssl_offset, use_mbed_tls)
@@ -227,8 +233,6 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             'use_mbed_tls': use_mbed_tls
         })
 
-
-
     def start_app_suspended(
         self,
         process_detach_event: threading.Event,
@@ -236,7 +240,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
     ) -> AutoVRResumableFridaApp:
 
         protocol = RPC()
-        
+
         script, device, pid = self._setup(
             self.device_name,
             self.package_name,
@@ -246,10 +250,12 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             protocol=protocol,
             process_detach_event=process_detach_event,
         )
-        
+
         if script is None and device is None and pid is None:
-            raise RuntimeError("Frida not properly setup, ensure Frida is running on the device.")
-        
+            raise RuntimeError(
+                "Frida not properly setup, ensure Frida is running on the device."
+            )
+
         return AutoVRResumableFridaAppImpl(
             device=device,
             device_name=self.device_name,
@@ -259,9 +265,10 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             protocol=protocol,
             il2cpp_script_json=self.il2cpp_script_json,
         )
-        
+
 
 stop_event = threading.Event()
+
 
 # Deprecated!
 def run_async(script, device, pid, tries, script_file, host, states,
@@ -300,7 +307,8 @@ def check_frida_ps_async(event: threading.Event, app: AutoVRResumableFridaApp):
         if "mInteractive=false" in interactive:
             logger.info("WAKING DEVICE")
             command = [
-                'adb', '-s', app.device_name, 'shell', 'input', 'keyevent', '26'
+                'adb', '-s', app.device_name, 'shell', 'input', 'keyevent',
+                '26'
             ]
             subprocess.run(command)
 
@@ -344,15 +352,9 @@ def does_contain_package(device_name, package_name):
     return output and not output == ''
 
 
-async def main(
-    device_name: str,
-    package_name: str,
-    script_file: str,
-    ssl_offset,
-    use_mbed_tls,
-    delay_scenes,
-    is_rooted):
-    
+async def main(device_name: str, package_name: str, script_file: str,
+               ssl_offset, use_mbed_tls, delay_scenes, is_rooted):
+
     logger.info("Staring AUTOVR:")
     logger.info(f"  device_name = {device_name}")
     logger.info(f"  package_name = {package_name}")
@@ -365,17 +367,17 @@ async def main(
     if not does_contain_package(device_name, package_name):
         logger.warning(f"{device_name} does not have package {package_name}")
         return
-    
+
     # originally from run.py: setup_base
     # preload the Unity symbols for the provided app
+    il2cpp_script_json = None
     if script_file != "" and os.path.exists(script_file):
         with open(script_file, "r", encoding="utf-8") as f:
             il2cpp_script_json = json.loads(f.read())
-    else:
+    elif script_file != "":
         raise RuntimeError(
-            "Must provide a valid script_json file from il2cppdumper"
-        )
-    
+            "Must provide a valid script_json file from il2cppdumper")
+
     delay_scenes = int(delay_scenes)
     autovr = AutoVR()
     autovr_frida = AutoVRLaunchableFridaAppImpl(
@@ -386,7 +388,7 @@ async def main(
         use_mbed_tls=use_mbed_tls,
         il2cpp_script_json=il2cpp_script_json,
     )
-    
+
     pid = None
     try:
         # Housekeeping
@@ -400,12 +402,12 @@ async def main(
             setup_crash_logs(device_name)
 
             process_detach_event = threading.Event()
-            
+
             resumable_app = autovr_frida.start_app_suspended(
                 process_detach_event=process_detach_event,
                 on_message_callback=autovr.on_message,
             )
-                
+
             # Submit the functions to the executor
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
@@ -418,8 +420,8 @@ async def main(
             )
 
             # Health checking
-            check_future = executor.submit(check_frida_ps_async, process_detach_event,
-                                           resumable_app)
+            check_future = executor.submit(check_frida_ps_async,
+                                           process_detach_event, resumable_app)
 
             # Wait until the first function is done
             for future in concurrent.futures.as_completed(
@@ -431,13 +433,15 @@ async def main(
                     # Restart to scene
                     logger.info("Crash occurs, restarting...")
                     if status.tries > 2:
-                        logger.info("Too many crash tries, exiting", package_name)
+                        logger.info("Too many crash tries, exiting",
+                                    package_name)
                         status.should_cont = False
                         break
                     curr_scene = states["curr_scene"]
                     if last_scene == curr_scene:
                         status.tries += 1
-                        logger.info("Scene", curr_scene, "attempt", status.tries)
+                        logger.info("Scene", curr_scene, "attempt",
+                                    status.tries)
                     else:
                         status.tries = 0
                         last_scene = curr_scene
@@ -466,7 +470,8 @@ async def main(
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Run AutOVR on a single package.')
+    parser = argparse.ArgumentParser(
+        description='Run AutOVR on a single package.')
     parser.add_argument('--device',
                         metavar='device',
                         type=str,
@@ -509,7 +514,8 @@ if __name__ == '__main__':
         default='3',
         required=False,
         help=
-        'The amount of delay (seconds) between scene loading and event parsing.')
+        'The amount of delay (seconds) between scene loading and event parsing.'
+    )
     parser.add_argument('--rooted',
                         metavar='is_rooted',
                         type=bool,
@@ -517,7 +523,7 @@ if __name__ == '__main__':
                         required=False,
                         help='Set to true if the device is rooted.')
     args = parser.parse_args()
-    
+
     asyncio.run(
         main(args.device, args.package, args.script_file, args.ssl_offset,
-            args.use_mbed_tls, args.delay_scenes, args.rooted))
+             args.use_mbed_tls, args.delay_scenes, args.rooted))
