@@ -342,9 +342,6 @@ export class EventLoader {
     return [];
   }
 
-  // TODO: retrieve function argument information for symbolic execution.
-  // TODO: deprecate this function and prefer using array transformers like
-  // hookAndInvokeCallbackEventHandlers.
   private hookAndInvokeUnityEvents() {
     let addrs: string[] = [];
     if (this.classes.UnityEvent && this.classes.InvokableCallList &&
@@ -703,11 +700,16 @@ export class EventTriggerer {
   // Assume comp is a triggerable
   public async triggerCollider(method: Il2Cpp.Method, comp: Il2Cpp.Object,
                                colliders: Array<Il2Cpp.Object>) {
+    if (comp.isNull()) {
+      return;
+    }
     let compMethod = comp.tryMethod(method.name, method.parameterCount);
     method.revert();
     method.implementation = function(v1: Il2Cpp.Object): any {
       console.log("[!]", "trigger", comp, v1);
-      return comp.method(method.name, method.parameterCount).invoke(v1);
+      if (!comp.isNull() && !v1.isNull()) {
+        return comp.method(method.name, method.parameterCount).invoke(v1);
+      }
     };
     let trigger_count = 0;
     for (const collider of colliders) {
@@ -728,6 +730,9 @@ export class EventTriggerer {
 
   public async triggerCollision(method: Il2Cpp.Method, comp: Il2Cpp.Object,
                                 collisionables: Array<Il2Cpp.Object>) {
+    if (comp.isNull()) {
+      return;
+    }
     const instance = Classes.getInstance();
     if (!instance.Rigidbody) {
       return;
@@ -785,16 +790,6 @@ export class EventTriggerer {
 
   private async triggerEventsOfObjs(method: Il2Cpp.Method,
                                     objsWithMethod: UnityObject[]) {
-    /*
-    if (method.isStatic) {
-      try {
-        method.invoke();
-      } catch (e) {
-        console.log(e);
-      }
-      return;
-    }
-    */
     const resolvedObjects = ResolvedObjects.getInstance();
     const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
 

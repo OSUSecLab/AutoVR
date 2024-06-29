@@ -310,71 +310,6 @@ export class Loader {
     });
   }
 
-  private static loadSceneNameRaw(name: string, single: boolean): Il2Cpp.Object
-      |null {
-    let instance = Classes.getInstance();
-    if (instance.LoadSceneParameters && instance.LoadSceneMode &&
-        instance.AsyncOperation && instance.Addressables &&
-        instance.AsyncOperationHandle && instance.SceneManager &&
-        instance.Scene) {
-      let mode = instance.LoadSceneMode.rawImageClass
-                     .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
-                     .value;
-      let SceneManager = instance.SceneManager;
-      let Addressables = instance.Addressables;
-      // let addressablesObj =
-      //    Addressables.method("get_m_Addressables").executeStatic() as
-      //    Il2Cpp.Object
-      // Util.debugHookAllObjectMethods(addressablesObj);
-      // console.log(instance.Addressables.imageClass);
-      console.log("LOADING GAME LOADER");
-      let ret = instance.Addressables.method("LoadScene")
-                    .executeStatic(Il2Cpp.string("GameLoader"), mode, true,
-                                   100) as Il2Cpp.ValueType;
-      /*
-                                   let load =
-          SceneManager.method("LoadSceneAsyncNameIndexInternal")
-              .executeStatic(
-                  Il2Cpp.string(
-                      "Packages/com.beatgames.beatsaber.init.quest/Scenes/QuestInit.unity"),
-                  -1, LoadSceneParameters_instance.unbox(), true) as
-          Il2Cpp.Object;
-      load.method("set_allowSceneActivation").invoke(true);
-      console.log(ret.handle);
-      console.log(ret.type);
-      console.log(ret.type.class);
-      */
-      /*
-      let nextResult =
-          ret.box()
-              .method<boolean>("System.Collections.IEnumerator.MoveNext")
-              .invoke();
-      console.log(nextResult);
-      while (nextResult) {
-        let result1 =
-            ret.box().method<number>("get_PercentComplete").invoke() as number;
-        let ctivate = ret.box().method<boolean>("get_IsDone").invoke();
-        // let ctivate =
-        // result.box().field<Il2Cpp.ValueType>("m_Operation").value;
-        if (ctivate || result1 > .89) {
-          console.log(result1);
-          console.log("ACTIVATED");
-          let result =
-              ret.box().method("get_Result").invoke() as Il2Cpp.ValueType;
-
-          console.log("ACTIVATED");
-          break;
-        }
-        nextResult =
-            ret.box()
-                .method<boolean>("System.Collections.IEnumerator.MoveNext")
-                .invoke();
-      }
-     */
-    }
-    return null;
-  }
-
   private static loadSceneIndexRaw(index: number,
                                    single: boolean): Il2Cpp.Object|null {
     let instance = Classes.getInstance();
@@ -408,7 +343,6 @@ export class Loader {
               .value);
 
       return Il2Cpp.mainThread.schedule(() => {
-        // Loader.downloadAssetWithPrimaryKey("QuestInit");
         var ret = null;
         if (index < sceneMap.count) {
           const sceneIndex: SceneIndex = sceneMap.get(index);
@@ -416,8 +350,7 @@ export class Loader {
           if (typeof sceneIndex.raw == "number") {
             ret = Loader.loadSceneIndexRaw(sceneIndex.raw!, single);
           } else {
-            console.log("LOAD SCENE", sceneIndex.raw);
-            ret = Loader.loadSceneNameRaw(sceneIndex.raw!, single);
+            // TODO: Add Addressables scene loading here once cracked.
           }
         }
         return ret;
@@ -482,43 +415,16 @@ export class Loader {
     return 0;
   }
 
-  private static async getAssetScenes() {
-    let assetScenes: Set<string> = new Set();
-    try {
-      assetScenes = new Set(Loader.identifyResourceLocators());
-    } catch (e) {
-      console.log(e);
-    }
-    return assetScenes;
-  }
-
   public static async countAllScenes() {
     let classes = Classes.getInstance();
     console.log("countAllScenes");
-    /*
-    await Loader
-        .hookLoadSceneExecution(() => Loader.loadSceneIndexRaw(0, true),
-                                undefined, undefined)
-        .then(() => Loader.revertSceneChange());
-    */
     var buildSceneCount = await Loader.getBuildSettingsCount();
-    // var assetScenes = await Loader.getAssetScenes();
-
-    console.log("countAllScenes");
 
     var index = 0;
     for (index = 0; index < buildSceneCount; index++) {
       const sceneIndex: SceneIndex = {raw : index};
       sceneMap.setSceneIdentifier(index, sceneIndex);
     }
-    /*
-     for (const sceneName of assetScenes) {
-       const sceneIndex: SceneIndex = {raw : sceneName};
-       console.log(index, sceneIndex.raw);
-       sceneMap.setSceneIdentifier(index, sceneIndex);
-       index++;
-     }
-    */
     return sceneMap.count;
   }
 
@@ -538,92 +444,6 @@ export class Loader {
     }
     console.log("SceneCount", sceneCount);
     return sceneCount;
-  }
-
-  private static downloadAssetWithPrimaryKey(key: string) {
-    let Addressables = Classes.getInstance().Addressables;
-    var ret: Il2Cpp.Object;
-    if (Addressables) {
-      ret = Addressables.method("DownloadDependenciesAsync")
-                .executeStatic(Il2Cpp.string(key), true) as Il2Cpp.Object;
-    }
-  }
-
-  // The idea here is to get IResourceLocators to identify assets. Scenes may be
-  // assets, where some games may only load scenes from asset bundles instead of
-  // relying on build indicies. This is common in large, well-maintained, games
-  // such as beatsaber.
-  public static identifyResourceLocators() {
-    let classes = Classes.getInstance();
-    let Addressables = classes.Addressables;
-    let Enumerable = classes.Enumerable;
-    console.log("identifyResourceLocators");
-    // Pathes to all scenes.
-    let scenes = new Set<string>();
-    try {
-      if (Addressables && classes.Object) {
-        let AddressablesImpl =
-            Addressables.method("get_m_Addressables").executeStatic() as
-            Il2Cpp.Object;
-        let resourceLocators =
-            ((AddressablesImpl.method("get_ResourceLocators").invoke() as
-              Il2Cpp.Object)
-                 .field("source")
-                 .value as Il2Cpp.Object)
-                .field("_items")
-                .value as Il2Cpp.Array<Il2Cpp.Object>;
-        for (const resourceLocator of resourceLocators) {
-          let locator =
-              resourceLocator.method("get_Locator").invoke() as Il2Cpp.Object;
-          let keys = locator.method("get_Keys").invoke() as Il2Cpp.Object;
-          let arr = Il2Cpp.array(classes.Object.imageClass,
-                                 keys.method("get_Count").invoke() as number);
-          const enumerator = keys.method("CopyTo").invoke(arr, 0);
-          const locations =
-              locator.method("get_Locations").invoke() as Il2Cpp.Object;
-          for (const resource of arr) {
-            let itemObject =
-                locations.method("get_Item").invoke(resource) as Il2Cpp.Object;
-            let count =
-                itemObject
-                    .method(
-                        "System.Collections.Generic.ICollection`1.get_Count")
-                    .invoke() as number;
-            for (var i = 0; i < count; i++) {
-              let resourceLocation =
-                  itemObject
-                      .method(
-                          "System.Collections.Generic.IReadOnlyList`1.get_Item")
-                      .invoke(i) as Il2Cpp.Object;
-              let primaryKey =
-                  resourceLocation.method("get_PrimaryKey").invoke() as
-                  Il2Cpp.Object;
-              let resourceType =
-                  resourceLocation.method("get_ResourceType").invoke() as
-                  Il2Cpp.Object;
-              let typename =
-                  resourceType.method("get_FullName").invoke() as Il2Cpp.String;
-              if (typename.content ===
-                  "UnityEngine.ResourceManagement.ResourceProviders.SceneInstance") {
-                console.log("Scene found:", resourceLocation);
-                try {
-                  scenes.add(primaryKey.toString());
-                  Loader.loadSceneNameRaw(primaryKey.toString(), true);
-                  Addressables.method("DownloadDependencies")
-                      .executeStatic(primaryKey);
-                  console.log("Loaded:", primaryKey);
-                } catch (error) {
-                  console.log(error);
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.log(e);
-    }
-    return scenes;
   }
 
   public static async start(symbol_payload: string, bypassEntitlement: boolean,
@@ -1012,14 +832,6 @@ export class ClassLoader {
     if (classes.LoadSceneMode == null) {
       classes.LoadSceneMode = ClassLoader.resolveClass<UnityClass>(
           img, "UnityEngine.SceneManagement.LoadSceneMode", true);
-    }
-    if (classes.Addressables == null) {
-      classes.Addressables = ClassLoader.resolveClass<UnityClass>(
-          img, "UnityEngine.AddressableAssets.Addressables", true);
-    }
-    if (classes.AddressablesImpl == null) {
-      classes.AddressablesImpl = ClassLoader.resolveClass<UnityClass>(
-          img, "UnityEngine.AddressableAssets.AddressablesImpl", true);
     }
     if (classes.Enumerable = null) {
       classes.Enumerable = ClassLoader.resolveClass<UnityClass>(

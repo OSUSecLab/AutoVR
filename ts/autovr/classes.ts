@@ -63,10 +63,6 @@ export class Classes {
   /* UI event handlers in array form */
   public EventHandlers: UnityClass[] = [];
 
-  /* Resource Locators */
-  public Addressables: UnityClass|null = null;
-  public AddressablesImpl: UnityClass|null = null;
-
   /* UI event helpers */
   public UnityAction: UnityClass|null = null;
   public UnityEvent: UnityClass|null = null;
