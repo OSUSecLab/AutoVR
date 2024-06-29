@@ -12,16 +12,27 @@ export class Classes {
     return Classes.instance;
   }
 
+  /* .NET classes */
+  public Enumerable: UnityClass|null = null;
+
   /* Unity base classes */
   public Object: UnityClass|null = null;
   public Resources: UnityClass|null = null;
+  public AssetBundle: UnityClass|null = null;
+  public ResourceManager: UnityClass|null = null;
+  public AsyncOperationHandle: UnityClass|null = null;
 
   /* Scene related classes */
   public SceneManager: UnityClass|null = null;
+  public Scene: UnityClass|null = null;
+  public SceneInstance: UnityClass|null = null;
   public LoadSceneParameters: UnityClass|null = null;
   public LoadSceneMode: UnityClass|null = null;
   public UnloadSceneOptions: UnityClass|null = null;
   public AsyncOperation: UnityClass|null = null;
+  public AssetDatabase: UnityClass|null = null;
+
+  public GameManager: UnityClass|null = null;
 
   /* General Unity objects */
   public Component: UnityClass|null = null;
@@ -51,6 +62,10 @@ export class Classes {
 
   /* UI event handlers in array form */
   public EventHandlers: UnityClass[] = [];
+
+  /* Resource Locators */
+  public Addressables: UnityClass|null = null;
+  public AddressablesImpl: UnityClass|null = null;
 
   /* UI event helpers */
   public UnityAction: UnityClass|null = null;
