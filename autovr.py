@@ -96,11 +96,15 @@ async def main(device_name: str, package_name: str, script_file: str,
         use_mbed_tls=use_mbed_tls,
         il2cpp_script_json=il2cpp_script_json,
     )
-    controller = AutoVRFridaAppController(autovr_frida)
+
+    controller = AutoVRFridaAppController(autovr_frida, delay_scenes)
 
     setup_crash_logs(device_name)
-    # Start AutoVR
+
     controller.start()
+
+    autovr_frida.frida_kill(package_name)
+    time.sleep(3)
     await extract_crash_logs(device_name, package_name, "/tmp/")
 
 

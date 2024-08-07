@@ -406,7 +406,6 @@ class AutoVR:
 
             # adopted from autovr.py: run_async
             self._methods = app.resume()
-            states = {"curr_scene": 0, "num_scenes": -1}
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)

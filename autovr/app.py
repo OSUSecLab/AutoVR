@@ -26,19 +26,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class Status:
-    tries: int
-    should_cont: bool
-
-
 class AutoVRFridaAppController():
 
-    def __init__(self, app: AutoVRLaunchableFridaApp):
+    def __init__(self,
+                 app: AutoVRLaunchableFridaApp,
+                 delay_scenes: int = 5000):
         self.curr_scene = -1
         self.last_scene = -1
-        self.status = Status(0, True)
+        self.tries = 0
+        self.should_cont = True
         self.states = {"curr_scene": 0, "num_scenes": -1}
+        self.delay_scenes = delay_scenes
         self.app = app
         self.driver = AutoVR()
 
@@ -77,15 +75,14 @@ class AutoVRFridaAppController():
 
     def start(self):
         # TODO: Make max number of tries into a flag and pass it in this function.
+        logger.info("Starting AutoVRApp")
         try:
-            while self.status.should_cont:
-                logger.info("Starting")
-
+            while self.should_cont:
                 process_detach_event = threading.Event()
 
-                resumable_app = self.app.start_app_suspended(
+                self.app = self.app.start_app_suspended(
                     process_detach_event=process_detach_event,
-                    on_message_callback=autovr.on_message,
+                    on_message_callback=self.driver.on_message,
                 )
 
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -93,55 +90,52 @@ class AutoVRFridaAppController():
                 # AutoVR driver thread
                 run_future = executor.submit(
                     self.driver.run,
-                    resumable_app,
-                    states,
-                    delay_scenes,
+                    self.app,
+                    self.states,
+                    self.delay_scenes,
                 )
                 # Server health checking
                 check_future = executor.submit(self.check_frida_ps_async,
-                                               process_detach_event,
-                                               resumable_app)
+                                               process_detach_event)
 
                 # Blocks until the first function is done
                 for future in concurrent.futures.as_completed(
                     [run_future, check_future]):
-                    logger.info(f"CURRENT SCENE: {states['curr_scene']}")
+                    logger.info(f"CURRENT SCENE: {self.states['curr_scene']}")
                     logger.info(future)
                     # If frida process is lost (a crash)
                     if future is check_future:
                         # Restart to scene
                         logger.info("Crash occurs, restarting...")
-                        if self.status.tries > 2:
+                        if self.tries > 2:
                             logger.info("Too many crash tries, exiting",
-                                        package_name)
-                            self.status.should_cont = False
+                                        self.app.package_name)
+                            self.should_cont = False
                             break
-                        curr_scene = self.states["curr_scene"]
+                        self.curr_scene = self.states["curr_scene"]
                         if self.last_scene == self.curr_scene:
-                            self.status.tries += 1
-                            logger.info("Scene", self.curr_scene, "attempt",
-                                        status.tries)
+                            self.tries += 1
                         else:
-                            self.status.tries = 0
+                            self.tries = 0
                             self.last_scene = self.curr_scene
                         break
                     # Scene successfully finished
                     elif future is run_future:
-                        status.should_cont = False
+                        self.should_cont = False
                         logger.info("Success")
                         logger.info(
                             "AutoVR finished executing, shutting down...")
                         process_detach_event.set()
                         break
 
+                # Cancel outstanding futures
+                run_future.cancel()
+                check_future.cancel()
+
                 executor.shutdown(wait=False)
         except Exception as e:
             logger.info("autovr Error:", e)
             pass
-
-        autovr_frida.frida_kill(package_name)
-        time.sleep(3)
-        logger.info("Done")
 
 
 class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
