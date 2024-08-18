@@ -93,6 +93,26 @@ export class Util {
     }
   }
 
+  static debugHookAllObjectMethods(obj: Il2Cpp.Object) {
+    let clazz = obj.class;
+    let methods = clazz.methods;
+    for (const method of methods) {
+      let objMethod = obj.method(method.name);
+      try {
+
+        objMethod.implementation = function(...params) {
+          console.log("CALLED", method.name);
+          try {
+            console.log(params);
+          } catch (err: any) {
+          }
+          return objMethod.invoke(...params);
+        };
+      } catch (err: any) {
+      }
+    }
+  }
+
   static objectsOfClass(clazz: Il2Cpp.Class, objs: Il2Cpp.Object[]) {
     return objs.filter(obj => clazz.isAssignableFrom(obj.class));
   }

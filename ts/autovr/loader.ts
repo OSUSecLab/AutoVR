@@ -4,6 +4,7 @@ import {Classes} from "./classes.js"
 import {Event, EventLoader, EventTriggerer} from "./events.js"
 import {APIHooker} from "./hooks.js"
 import {initNotifier, loadSceneNotifier, RPC} from './rpc.js'
+import {SceneIndex, SceneMap} from "./scene.js"
 import {UnityClass, UnityMethod, UnityObject} from "./unity_types.js"
 import {promiseTimeout, promiseTimeoutRevert, Util} from './utils.js'
 
@@ -23,7 +24,8 @@ var curr_scene: number = 0;
 var eventLoader: EventLoader;
 var eventTriggerer: EventTriggerer;
 
-declare function assert(value: unknown): asserts value;
+// TODO: Make a singleton?
+const sceneMap: SceneMap = new SceneMap();
 
 export class Loader {
   protected constructor() {}
@@ -173,18 +175,24 @@ export class Loader {
     return eventLoader.getEventFunctionCallbacks(currentObjects);
   }
 
-  public static async loadSceneEvents(scene_index: number,
-                                      delay_scenes_ms: number = 5000) {
+  private static async hookLoadSceneExecution(
+      beforeHook?: (...parameters: any[]) => void,
+      duringHook?: (...parameters: any[]) => void,
+      afterHook?: (...parameters: any[]) => void): Promise<number> {
     let instance = Classes.getInstance();
-    console.log("loadSceneEvents")
+    console.log("hookLoadSceneExecution");
     if (instance.SceneManager) {
       var Method_LoadSceneAsyncNameIndexInternal =
           instance.SceneManager.method("LoadSceneAsyncNameIndexInternal");
       let promise = new Promise<any>((resolve, reject) => {
+        if (beforeHook) {
+          beforeHook();
+        }
         Method_LoadSceneAsyncNameIndexInternal.implementation = function(
             v1, v2, v3, v4): any {
-          APIHooker.revertEntitlementCheck_alt();
-          APIHooker.hookEntitlementCheck_alt();
+          if (duringHook) {
+            duringHook(v1, v2, v3, v4);
+          }
           const result = Method_LoadSceneAsyncNameIndexInternal.executeStatic(
               v1, v2, v3, v4);
           console.log("Method_LoadSceneAsyncNameIndexInternal:" + v1 + ":" + v2,
@@ -192,17 +200,36 @@ export class Loader {
           resolve(v1);
           return result;
         };
-        curr_event = '';
-        curr_scene = scene_index;
-        Loader.loadScene("", scene_index, true);
+        if (afterHook) {
+          afterHook();
+        }
       });
-      let scene = await promise;
-      Method_LoadSceneAsyncNameIndexInternal.revert();
-      Loader.revertSceneChange();
-
-      return await Loader.getAllObjects(delay_scenes_ms)
-          .then(currentObjects => Loader.resolveObjects(currentObjects));
+      return promise;
     }
+    // Failed
+    return Promise.resolve(-1);
+  }
+
+  public static async loadSceneEvents(scene_index: number,
+                                      delay_scenes_ms: number = 5000) {
+    let instance = Classes.getInstance();
+    console.log("loadSceneEvents");
+    return await Loader
+        .hookLoadSceneExecution(() => Loader.loadScene("", scene_index, true),
+                                (v1, v2, v3, v4) => {
+                                  APIHooker.revertEntitlementCheck_alt();
+                                  APIHooker.hookEntitlementCheck_alt();
+                                },
+                                () => {
+                                  curr_event = '';
+                                  curr_scene = scene_index;
+                                  Loader.loadScene("", scene_index, true);
+                                })
+        .then(() => {
+          Loader.revertSceneChange();
+          return Loader.getAllObjects(delay_scenes_ms);
+        })
+        .then(currentObjects => Loader.resolveObjects(currentObjects));
   }
 
   public static triggerEvent(event: Event) {
@@ -283,6 +310,26 @@ export class Loader {
     });
   }
 
+  private static loadSceneIndexRaw(index: number,
+                                   single: boolean): Il2Cpp.Object|null {
+    let instance = Classes.getInstance();
+    if (instance.LoadSceneParameters && instance.LoadSceneMode &&
+        instance.AsyncOperation && instance.SceneManager) {
+      const LoadSceneParameters_instance =
+          instance.LoadSceneParameters.rawImageClass.new();
+      LoadSceneParameters_instance.method(".ctor").invoke(
+          instance.LoadSceneMode.rawImageClass
+              .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
+              .value);
+      let SceneManager = instance.SceneManager;
+      return SceneManager.method("LoadSceneAsyncNameIndexInternal")
+                 .executeStatic(Il2Cpp.string(""), index,
+                                LoadSceneParameters_instance.unbox(), true) as
+             Il2Cpp.Object;
+    }
+    return null;
+  }
+
   public static async loadScene(name: string, index: number,
                                 single: boolean): Promise<Il2Cpp.Object|null> {
     let instance = Classes.getInstance();
@@ -297,23 +344,13 @@ export class Loader {
 
       return Il2Cpp.mainThread.schedule(() => {
         var ret = null;
-        let SceneManager = instance.SceneManager;
-        if (SceneManager) {
-          if (index == -1) {
-            console.log("LOAD SCENE");
-            ret = SceneManager.method("LoadSceneAsyncNameIndexInternal")
-                      .executeStatic(Il2Cpp.string(name), -1,
-                                     LoadSceneParameters_instance.unbox(),
-                                     true) as Il2Cpp.Object;
+        if (index < sceneMap.count) {
+          const sceneIndex: SceneIndex = sceneMap.get(index);
+          console.log("LOAD SCENE", sceneIndex.raw);
+          if (typeof sceneIndex.raw == "number") {
+            ret = Loader.loadSceneIndexRaw(sceneIndex.raw!, single);
           } else {
-            console.log("LOAD SCENE");
-            ret =
-                SceneManager.method("LoadScene")
-                    .overload("System.Int32",
-                              "UnityEngine.SceneManagement.LoadSceneParameters")
-                    .executeStatic(index,
-                                   LoadSceneParameters_instance.unbox()) as
-                Il2Cpp.Object;
+            // TODO: Add Addressables scene loading here once cracked.
           }
         }
         return ret;
@@ -364,7 +401,7 @@ export class Loader {
     return [];
   }
 
-  public static async countAllScenes() {
+  private static async getBuildSettingsCount() {
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
       let SceneManager = instance.SceneManager
@@ -375,6 +412,23 @@ export class Loader {
         return sceneCount;
       }
     }
+    return 0;
+  }
+
+  public static async countAllScenes() {
+    let classes = Classes.getInstance();
+    console.log("countAllScenes");
+    var buildSceneCount = await Loader.getBuildSettingsCount();
+
+    var index = 0;
+    for (index = 0; index < buildSceneCount; index++) {
+      const sceneIndex: SceneIndex = {raw : index};
+      sceneMap.setSceneIdentifier(index, sceneIndex);
+    }
+    return sceneMap.count;
+  }
+
+  private static async countAllScenes_legacy() {
     var maxSceneCount = 50;
     var sceneCount = 0;
     var ret = null;
@@ -388,7 +442,7 @@ export class Loader {
       }
       sceneCount = i;
     }
-    console.log("Scene Count", sceneCount);
+    console.log("SceneCount", sceneCount);
     return sceneCount;
   }
 
@@ -418,8 +472,7 @@ export class Loader {
         console.log(sse);
         console.error(u.stack);
       }
-    }, "main"); // running on main thread so this will wait for libil2cpp to
-                // load
+    }, "free");
   }
 }
 
@@ -779,6 +832,10 @@ export class ClassLoader {
       classes.LoadSceneMode = ClassLoader.resolveClass<UnityClass>(
           img, "UnityEngine.SceneManagement.LoadSceneMode", true);
     }
+    if (classes.Enumerable = null) {
+      classes.Enumerable = ClassLoader.resolveClass<UnityClass>(
+          img, "System.Linq.Enumerable", true);
+    }
     if (classes.UnloadSceneOptions == null) {
       classes.UnloadSceneOptions = ClassLoader.resolveClass<UnityClass>(
           img, "UnityEngine.SceneManagement.UnloadSceneOptions", true);
@@ -1007,6 +1064,25 @@ export class ClassLoader {
     if (classes.Socket == null) {
       classes.Socket = ClassLoader.resolveClass<UnityClass>(
           img, "System.Net.Sockets.Socket", true);
+    }
+    if (classes.AssetBundle == null) {
+      classes.AssetBundle = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.AssetBundle", true);
+    }
+    if (classes.AsyncOperationHandle == null) {
+      classes.AsyncOperationHandle = ClassLoader.resolveClass<UnityClass>(
+          img,
+          "UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationHandle",
+          true);
+    }
+    if (classes.SceneInstance == null) {
+      classes.SceneInstance = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.ResourceManagement.ResourceProviders.SceneInstance",
+          true);
+    }
+    if (classes.Scene == null) {
+      classes.Scene = ClassLoader.resolveClass<UnityClass>(
+          img, "UnityEngine.SceneManagement.Scene", true);
     }
   }
 }

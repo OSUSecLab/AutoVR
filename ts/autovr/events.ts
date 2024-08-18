@@ -103,7 +103,8 @@ export class EventLoader {
   private implementsUIHandler(clazz: Il2Cpp.Class) {
     let classes = Classes.getInstance();
     for (const eh of classes.EventHandlers) {
-      if (clazz.isSubclassOf(eh.rawImageClass, true)) {
+      if (clazz.isSubclassOf(eh.rawImageClass, true) ||
+          clazz.isAssignableFrom(eh.rawImageClass)) {
         return true;
       }
     }
@@ -141,14 +142,11 @@ export class EventLoader {
         result.hasUEvent = fieldClass.parent!.name.includes("UnityEvent");
         result.hasCallbackEventHandler =
             fieldClass.parent!.name.includes("hasCallbackEventHandler");
-        if (this.implementsUIHandler(fieldClass.parent)) {
-          result.isUIEvent = true;
-        }
+        result.isUIEvent = this.implementsUIHandler(fieldClass.parent);
         fields.concat(fieldClass.parent!.fields);
       }
-      if (this.implementsUIHandler(field.type.class)) {
-        result.isUIEvent = true;
-      }
+      result.isUIEvent =
+          result.isUIEvent || this.implementsUIHandler(field.type.class);
 
       fields.forEach(f => {
         let fclass = f.type.class;
@@ -164,6 +162,7 @@ export class EventLoader {
             result.hasCallbackEventHandler =
                 found.hasCallbackEventHandler || result.hasCallbackEventHandler;
             if (found.hasUEvent || found.hasCallbackEventHandler) {
+              found.isUIEvent = result.isUIEvent;
               result.subFields.push(found);
             }
           }
@@ -183,7 +182,8 @@ export class EventLoader {
     fieldDatas.filter(fd => fd.field !== undefined).forEach(fd => {
       let field = fd.field!;
       let fieldName = field.name;
-      if (field && (fd.hasUEvent || fd.hasCallbackEventHandler)) {
+      if (field && (fd.hasUEvent || fd.hasCallbackEventHandler) &&
+          fd.isUIEvent) {
         console.log("Component:", component, "Field:", field, fd.isUIEvent,
                     fd.subFields.length);
         if ((this.fieldNameHas(field, "UnityEvent") ||
@@ -342,9 +342,6 @@ export class EventLoader {
     return [];
   }
 
-  // TODO: retrieve function argument information for symbolic execution.
-  // TODO: deprecate this function and prefer using array transformers like
-  // hookAndInvokeCallbackEventHandlers.
   private hookAndInvokeUnityEvents() {
     let addrs: string[] = [];
     if (this.classes.UnityEvent && this.classes.InvokableCallList &&
@@ -669,7 +666,11 @@ export class EventTriggerer {
                   for (var j = 0; j < 2; j++) {
                     const argsList = this.generateArguments(
                         compMethod, j == 1 ? true : false);
-                    compMethod.invoke(...argsList);
+                    try {
+                      compMethod.invoke(...argsList);
+                    } catch (e) {
+                      console.log("Invoke failed, msg:", e);
+                    }
                   }
                 }
               });
@@ -679,7 +680,11 @@ export class EventTriggerer {
               // all possible threads.
               await Util.runOnAllThreads(() => {
                 if (compMethod) {
-                  compMethod.invoke();
+                  try {
+                    compMethod.invoke();
+                  } catch (e) {
+                    console.log("Invoke failed, msg:", e);
+                  }
                 }
               });
             }
@@ -695,11 +700,16 @@ export class EventTriggerer {
   // Assume comp is a triggerable
   public async triggerCollider(method: Il2Cpp.Method, comp: Il2Cpp.Object,
                                colliders: Array<Il2Cpp.Object>) {
+    if (comp.isNull()) {
+      return;
+    }
     let compMethod = comp.tryMethod(method.name, method.parameterCount);
     method.revert();
     method.implementation = function(v1: Il2Cpp.Object): any {
       console.log("[!]", "trigger", comp, v1);
-      return comp.method(method.name, method.parameterCount).invoke(v1);
+      if (!comp.isNull() && !v1.isNull()) {
+        return comp.method(method.name, method.parameterCount).invoke(v1);
+      }
     };
     let trigger_count = 0;
     for (const collider of colliders) {
@@ -720,6 +730,9 @@ export class EventTriggerer {
 
   public async triggerCollision(method: Il2Cpp.Method, comp: Il2Cpp.Object,
                                 collisionables: Array<Il2Cpp.Object>) {
+    if (comp.isNull()) {
+      return;
+    }
     const instance = Classes.getInstance();
     if (!instance.Rigidbody) {
       return;
@@ -777,16 +790,6 @@ export class EventTriggerer {
 
   private async triggerEventsOfObjs(method: Il2Cpp.Method,
                                     objsWithMethod: UnityObject[]) {
-    /*
-    if (method.isStatic) {
-      try {
-        method.invoke();
-      } catch (e) {
-        console.log(e);
-      }
-      return;
-    }
-    */
     const resolvedObjects = ResolvedObjects.getInstance();
     const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
 
