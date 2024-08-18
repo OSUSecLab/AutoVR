@@ -227,7 +227,6 @@ export class APIHooker {
     if (uCAPI && APIHooker.enableEntitlement) {
       let CAPI = uCAPI.rawImageClass;
       let ovrGetIsViewerEntitled = CAPI.method<void>(USER_ENTITLEMENT);
-      console.log("HOOKING");
       ovrGetIsViewerEntitled.implementation = function() {
         console.log(USER_ENTITLEMENT);
         return
@@ -251,9 +250,7 @@ export class APIHooker {
         if (retType.toString() == USER_ENTITLEMENT) {
           let message = v1;
           MessageIsError.implementation = function(v1: NativePointer): boolean {
-            console.log("MESSAGE IS ERROR", v1);
             if (message.toString() == v1.toString()) {
-              console.log("FOUND ERROR");
               return false;
             }
             let ret = MessageIsError.invoke(v1);
@@ -281,18 +278,15 @@ export class APIHooker {
           let ret = isUserEntitled.invoke();
           if (ret) {
             let onComplete = ret.method("OnComplete", 1);
-            console.log(onComplete);
             onComplete.implementation = function(v1: Il2Cpp.Object): any {
               v1.method("Invoke", 1).implementation = function(
                   message: Il2Cpp.Object) {
                 let isErr = message.method<boolean>("get_IsError");
                 isErr.implementation = function() {
-                  console.log("RETURNING NO ERROR");
                   return false;
                 };
                 let err = message.method<Il2Cpp.Object>("GetError");
                 err.implementation = function() {
-                  console.log("RETURNING NULL POINTER");
                   return new Il2Cpp.Object(new NativePointer(0x0));
                 };
                 return v1.method("Invoke", 1).invoke(message);

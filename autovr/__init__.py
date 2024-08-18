@@ -1,6 +1,7 @@
 # This is the __init__.py file for the py package
 
 # Import modules
+from . import app
 from . import events
 from . import cfg_payload
 from . import mi_builder
