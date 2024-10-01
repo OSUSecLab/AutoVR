@@ -58,7 +58,8 @@ python3.11 autovr.py --device 1WMHHA69J92123 --package com.my.package \
                       --delay_scenes 5000 \
                       --rooted False
 ```
-
+## Citing AutoVR
+Pending
 
 License
 =======
