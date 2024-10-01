@@ -1,3 +1,18 @@
+/*
+ * Copyright 2024 The AutoVR Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import "frida-il2cpp-bridge";
 
 import {Classes} from "./classes.js"
@@ -95,25 +110,6 @@ export class Loader {
     }
   }
 
-  private static bypassEntitlements() {
-    let oculusPlatform = Il2Cpp.domain.tryAssembly("Oculus.Platform.dll")
-    if (oculusPlatform != null) {
-      let img = oculusPlatform.image;
-      console.log("Timing");
-      let capi = img.tryClass("Oculus.Platform.CAPI");
-      if (capi != null) {
-        capi.method<void>("ovr_Entitlement_GetIsViewerEntitled")
-            .implementation = function() {
-          // TODO: seems like most games don't check return value, but it might
-          // be worth looking into creating a fake UInt64 object that points to
-          // a succeeded Message.
-          console.log("Entitlements called, returning nothing.");
-          return 0;
-        };
-      }
-    }
-  }
-
   /** Resolves all methods of all classes. */
   private static resolveAllMethods(img: Il2Cpp.Image) {
     console.log("Resolving methods from " + img.name);
@@ -123,23 +119,11 @@ export class Loader {
     });
   }
 
-  private static init(bypassEntitlement: boolean) {
+  private static init() {
     console.log("Initializing classes...");
     const classes = Classes.getInstance();
     // To see il2cpp exceptions:
     // Il2Cpp.installExceptionListener("all");
-
-    if (bypassEntitlement) {
-      console.log("Adding hook to bypassing entitlement check")
-      Loader.bypassEntitlements();
-    }
-    // Loader.resolveSymbols();
-
-    // if (ResolvedSymbols.getInstance().symbolsMap().length <= 0) {
-    //     console.log("Error: Symbols must be loaded into ResolvedSymbols
-    //     before Loader initialization") throw Error("Symbols must be loaded
-    //     into ResolvedSymbols before Loader initialization")
-    // }
 
     Il2Cpp.domain.assemblies.forEach(assemb => {
       let img = assemb.image;
@@ -446,7 +430,7 @@ export class Loader {
     return sceneCount;
   }
 
-  public static async start(symbol_payload: string, bypassEntitlement: boolean,
+  public static async start(symbol_payload: string,
                             bypassSSLPinning: boolean) {
     console.log("Attaching...");
     if (bypassSSLPinning) {
@@ -466,7 +450,7 @@ export class Loader {
       console.log("Performing Il2Cpp");
       try {
         console.log("Loaded Unity version: " + Il2Cpp.unityVersion);
-        return Loader.init(bypassEntitlement = bypassEntitlement);
+        return Loader.init();
       } catch (sse) {
         const u = sse as Error
         console.log(sse);
