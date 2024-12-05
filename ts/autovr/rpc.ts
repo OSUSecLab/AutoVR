@@ -202,6 +202,13 @@ export class RPC {
     console.log("eventNames:", eventNames)
     return eventNames;
   }
+  
+  static getSceneEvents() {
+    RPC.healthCheckCount = 0;
+    let eventNames = Loader.getSceneEvents();
+    console.log("eventNames:", eventNames)
+    return eventNames;
+  }
 
   static loadScene(scene_index: number) {
     RPC.healthCheckCount = 0;

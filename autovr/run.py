@@ -237,23 +237,25 @@ class AutoVR:
         else:
             logger.info(message)
 
-    async def start(
-        self,
-        app: AutoVRResumableFridaApp,
-        curr_scene: int,
-        start_time: float,
-        states,
-        delay_scenes: int,
-        detach_event: Optional[asyncio.Event] = None,
-    ):
+    async def start(self,
+                    app: AutoVRResumableFridaApp,
+                    curr_scene: int,
+                    start_time: float,
+                    states,
+                    delay_scenes: int,
+                    detach_event: Optional[asyncio.Event] = None,
+                    should_load_scene: bool = True):
         try:
             states["curr_scene"] = curr_scene
             self.init(curr_scene)
 
-            # Delay so all objects can load once the scene is loaded.
-            # time.sleep(delay_scenes)
-            init_events = app.protocol.load_scene_events(
-                curr_scene, delay_scenes)
+            if should_load_scene:
+                # Delay so all objects can load once the scene is loaded.
+                # time.sleep(delay_scenes)
+                init_events = app.protocol.load_scene_events(
+                    curr_scene, delay_scenes)
+            else:
+                init_events = app.protocol.get_scene_events()
 
             all_events = set()
 
@@ -338,11 +340,48 @@ class AutoVR:
         if curr_scene in self._triggers:
             logger.info(f"Triggers: {self._triggers[curr_scene]}")
 
-    async def _arun(self,
-                    app: AutoVRResumableFridaApp,
-                    states: Dict[str, Any],
-                    delay_scenes: int,
-                    detach_event: Optional[asyncio.Event] = None):
+    async def _start_scene(self, app: AutoVRResumableFridaApp,
+                           states: Dict[str, Any], delay_scenes: int,
+                           curr_scene: int, start_time: float,
+                           detach_event: Optional[asyncio.Event],
+                           should_load_scene: bool):
+        logger.info(f"curr_scene={curr_scene}")
+        if not (await
+                self.start(app, curr_scene, start_time, states, delay_scenes,
+                           detach_event, should_load_scene)):
+            return True  # Should continue if in auto-finish.
+        states["curr_scene"] = curr_scene
+        self.collect_metrics(app.package_name, start_time, curr_scene)
+
+    async def _auto_finish_scenes(
+        self,
+        app: AutoVRResumableFridaApp,
+        states: Dict[str, Any],
+        delay_scenes: int,
+        start_scene: int,
+        num_scenes: int,
+        start_time: float,
+        detach_event: Optional[asyncio.Event],
+    ):
+        # auto mode should always load the scene.
+        should_load_scene = True
+        for curr_scene in range(start_scene, num_scenes):
+            if detach_event is not None and detach_event.is_set():
+                logger.info("Detaching...")
+                return
+            if await self._start_scene(app, states, delay_scenes, curr_scene,
+                                       start_time, detach_event,
+                                       should_load_scene):
+                continue
+
+    async def _arun(
+        self,
+        app: AutoVRResumableFridaApp,
+        states: Dict[str, Any],
+        delay_scenes: int,
+        manual_scenes: bool,
+        detach_event: Optional[asyncio.Event] = None,
+    ):
 
         num_scenes = states["num_scenes"]
         start_scene = states["curr_scene"]
@@ -350,22 +389,50 @@ class AutoVR:
         start_time = time.time()
 
         logger.info(f"Total number of scenes: {num_scenes}")
-        for curr_scene in range(start_scene, num_scenes):
-            if detach_event is not None and detach_event.is_set():
-                logger.info("Detaching...")
-                return
-            logger.info(f"curr_scene={curr_scene}")
-            if not (await self.start(app, curr_scene, start_time, states,
-                                     delay_scenes, detach_event)):
-                continue
-            states["curr_scene"] = curr_scene
-            self.collect_metrics(app.package_name, start_time, curr_scene)
+
+        def _is_in_range(val, max_val):
+            try:
+                int_val = int(val)
+                return int_val < max_val
+            except ValueError:
+                print("Not a number")
+                return False
+
+        # Allows selecting which scene to run. Must be < num_scenes.
+        # 'exit' will exit. 'auto' will run the remaining scenes from the current scene number.
+        # If you want to restart and autofinish, you must select scene 0 first before 'auto'.
+        if manual_scenes:
+            while True:
+                curr_scene = states["curr_scene"]
+                input_val = input(
+                    "Enter scene number, 'exit' to exit, 'auto' to auto finish, 'start' to start without loading scene: "
+                )
+                if input_val == 'exit':
+                    return
+                elif input_val == 'auto':
+                    self._auto_finish_scenes(app, states, delay_scenes,
+                                             curr_scene, num_scenes,
+                                             start_time, detach_event)
+                    return
+                elif input_val == 'start':
+                    _ = await self._start_scene(app, states, delay_scenes,
+                                                curr_scene, start_time,
+                                                detach_event, False)
+                elif _is_in_range(input_val, num_scenes):
+                    _ = await self._start_scene(app, states, delay_scenes,
+                                                curr_scene, start_time,
+                                                detach_event, True)
+
+        else:
+            await self._auto_finish_scenes(app, states, delay_scenes,
+                                           start_scene, num_scenes, start_time)
 
     def run(
         self,
         app: AutoVRResumableFridaApp,
         states: Dict[str, Any],
         delay_scenes: int,
+        manual: bool,
         detach_event: Optional[threading.Event] = None,
     ):
         logger.info("Starting autovr:run ...")
@@ -387,6 +454,7 @@ class AutoVR:
             thread = threading.Thread(target=loop.run_until_complete,
                                       args=[
                                           self._arun(app, states, delay_scenes,
+                                                     manual,
                                                      detach_async_event)
                                       ])
             thread.start()
