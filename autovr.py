@@ -18,7 +18,7 @@ from autovr.rpc import RPC
 from autovr.app import AutoVRFridaAppController, AutoVRLaunchableFridaAppImpl
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format=
     "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
     datefmt="%d/%b/%Y %H:%M:%S")
