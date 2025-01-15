@@ -410,9 +410,9 @@ class AutoVR:
                 if input_val == 'exit':
                     return
                 elif input_val == 'auto':
-                    self._auto_finish_scenes(app, states, delay_scenes,
-                                             curr_scene, num_scenes,
-                                             start_time, detach_event)
+                    await self._auto_finish_scenes(app, states, delay_scenes,
+                                                   curr_scene, num_scenes,
+                                                   start_time, detach_event)
                     return
                 elif input_val == 'start':
                     _ = await self._start_scene(app, states, delay_scenes,
@@ -425,7 +425,7 @@ class AutoVR:
 
         else:
             await self._auto_finish_scenes(app, states, delay_scenes,
-                                           start_scene, num_scenes, start_time)
+                                           start_scene, num_scenes, start_time, detach_event)
 
     def run(
         self,
