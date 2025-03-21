@@ -39,6 +39,7 @@ function run_module() {
     loadSceneEvents(
         scene_index, delay_scenes_ms
         ?) { return RPC.loadSceneEvents(scene_index, delay_scenes_ms); },
+    getSceneEvents() { return RPC.getSceneEvents(); },
     loadScene(scene_index) { return RPC.loadScene(scene_index); },
     unloadScene(scene_index) { return RPC.unloadScene(scene_index); },
     triggerEvent(payload) { return RPC.triggerEvent(payload); },

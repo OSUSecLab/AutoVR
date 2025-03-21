@@ -61,7 +61,7 @@ def does_contain_package(device_name, package_name):
 
 
 async def main(device_name: str, package_name: str, script_file: str,
-               ssl_offset, use_mbed_tls, delay_scenes, is_rooted):
+               ssl_offset, use_mbed_tls, delay_scenes, is_rooted, manual):
 
     logger.info("Staring AUTOVR:")
     logger.info(f"  device_name = {device_name}")
@@ -71,6 +71,7 @@ async def main(device_name: str, package_name: str, script_file: str,
     logger.info(f"  use_mbed_tls = {use_mbed_tls}")
     logger.info(f"  delay_scenes = {delay_scenes}")
     logger.info(f"  is_rooted = {is_rooted}")
+    logger.info(f"  manual = {manual}")
 
     if not does_contain_package(device_name, package_name):
         logger.warning(f"{device_name} does not have package {package_name}")
@@ -97,7 +98,7 @@ async def main(device_name: str, package_name: str, script_file: str,
         il2cpp_script_json=il2cpp_script_json,
     )
 
-    controller = AutoVRFridaAppController(autovr_frida, delay_scenes)
+    controller = AutoVRFridaAppController(autovr_frida, manual, delay_scenes)
 
     setup_crash_logs(device_name)
 
@@ -162,8 +163,15 @@ if __name__ == '__main__':
                         default=False,
                         required=False,
                         help='Set to true if the device is rooted.')
+    parser.add_argument(
+        '--manual',
+        metavar='manual',
+        type=bool,
+        default=False,
+        required=False,
+        help='Set to true if a manual prompt is needed per scene.')
     args = parser.parse_args()
 
     asyncio.run(
         main(args.device, args.package, args.script_file, args.ssl_offset,
-             args.use_mbed_tls, args.delay_scenes, args.rooted))
+             args.use_mbed_tls, args.delay_scenes, args.rooted, args.manual))

@@ -43,6 +43,7 @@ class AutoVRFridaAppController():
 
     def __init__(self,
                  app: AutoVRLaunchableFridaApp,
+                 manual: bool,
                  delay_scenes: int = 5000):
         self.curr_scene = -1
         self.last_scene = -1
@@ -52,6 +53,7 @@ class AutoVRFridaAppController():
         self.delay_scenes = delay_scenes
         self.app = app
         self.driver = AutoVR()
+        self.manual = manual
 
     def check_frida_ps_async(self, event: threading.Event):
         logger.info("Checking frida processes")
@@ -63,7 +65,7 @@ class AutoVRFridaAppController():
         asyncio.set_event_loop(loop)
 
         while not event.is_set():
-            logger.info("Polling...")
+            logger.debug("Polling...")
 
             # Wake up device if off
             command = [
@@ -71,16 +73,15 @@ class AutoVRFridaAppController():
             ]
             interactive = subprocess.check_output(command).decode("utf-8")
             if "mInteractive=false" in interactive:
-                logger.info("WAKING DEVICE")
+                logger.debug("WAKING DEVICE")
                 command = [
                     'adb', '-s', device_name, 'shell', 'input', 'keyevent',
                     '26'
                 ]
                 subprocess.run(command)
-
             health = loop.run_until_complete(self.app.check_health_async())
             if not health:
-                logger.info("Health check failed.")
+                logger.debug("Health check failed.")
                 return
             time.sleep(5)
         loop.close()
@@ -101,23 +102,24 @@ class AutoVRFridaAppController():
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
                 # AutoVR driver thread
-                run_future = executor.submit(
-                    self.driver.run,
-                    self.app,
-                    self.states,
-                    self.delay_scenes,
-                )
-                # Server health checking
-                check_future = executor.submit(self.check_frida_ps_async,
-                                               process_detach_event)
+                run_future = executor.submit(self.driver.run, self.app,
+                                             self.states, self.delay_scenes,
+                                             self.manual)
+
+                check_future = None
+                futures = [run_future]
+                if not self.manual:
+                    # Server health checking
+                    check_future = executor.submit(self.check_frida_ps_async,
+                                                   process_detach_event)
+                    futures.append(check_future)
 
                 # Blocks until the first function is done
-                for future in concurrent.futures.as_completed(
-                    [run_future, check_future]):
+                for future in concurrent.futures.as_completed(futures):
                     logger.info(f"CURRENT SCENE: {self.states['curr_scene']}")
                     logger.info(future)
                     # If frida process is lost (a crash)
-                    if future is check_future:
+                    if check_future != None and future is check_future:
                         # Restart to scene
                         logger.info("Crash occurs, restarting...")
                         if self.tries > 2:
@@ -143,7 +145,8 @@ class AutoVRFridaAppController():
 
                 # Cancel outstanding futures
                 run_future.cancel()
-                check_future.cancel()
+                if check_future:
+                    check_future.cancel()
 
                 executor.shutdown(wait=False)
         except Exception as e:
@@ -233,6 +236,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         rooted: bool = False,
         ssl_offset: str = '',
         use_mbed_tls: bool = True,
+        manual: bool = False,
     ) -> None:
         self.device_name = device_name
         self.package_name = package_name
@@ -240,6 +244,7 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
         self.ssl_offset = ssl_offset
         self.use_mbed_tls = use_mbed_tls
         self.il2cpp_script_json = il2cpp_script_json
+        self.manual = manual
 
     # originally from run.py: _process_pids
     def _process_pids(self, pids: List[str]):

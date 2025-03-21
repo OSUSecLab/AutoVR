@@ -194,6 +194,12 @@ export class Loader {
     return Promise.resolve(-1);
   }
 
+  public static async getSceneEvents() {
+    // 0 delay for immediate execution.
+    return await Loader.getAllObjects(0)
+    	.then(currentObjects => Loader.resolveObjects(currentObjects));
+  }
+
   public static async loadSceneEvents(scene_index: number,
                                       delay_scenes_ms: number = 5000) {
     let instance = Classes.getInstance();
