@@ -1,3 +1,16 @@
+# Copyright 2024 The AutoVR Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 RPC protocol to communicate method instruction resolution and symbol resolution.
 
@@ -21,10 +34,7 @@ class RPC:
     def set_export_sync(self, exports):
         self.exports_sync = exports
 
-    def init(self,
-             symbol_payload: str = "",
-             bypassEntitlement: bool = True,
-             bypassSSLPinning: bool = False):
+    def init(self, symbol_payload: str = "", bypassSSLPinning: bool = False):
         """
         symbol payload format is a json string:
         {
@@ -38,8 +48,7 @@ class RPC:
            ]
         }
         """
-        return self.exports_sync.init(symbol_payload, bypassEntitlement,
-                                      bypassSSLPinning)
+        return self.exports_sync.init(symbol_payload, bypassSSLPinning)
 
     def check_health(self):
         return self.exports_async.check_health()

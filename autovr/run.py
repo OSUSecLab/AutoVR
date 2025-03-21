@@ -1,3 +1,16 @@
+# Copyright 2024 The AutoVR Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import pathlib
 import threading
@@ -17,7 +30,6 @@ from .rpc import *
 from .events import *
 from .cfg_payload import *
 from threading import *
-from .mi_builder import *
 
 logger = logging.getLogger(__name__)
 
@@ -39,51 +51,6 @@ def deprecated(message):
         return deprecated_func
 
     return deprecated_decorator
-
-
-# NOTE: this method does not compile
-# def parse_instructions(ins, count):
-#     method_instructions = []
-#     for addr, inst in ins.items():
-#         #print("Resolving", addr)
-#         ins_list = inst["instructions"]
-#         name = _methods[addr]
-#         #if count == 0:
-#         #    print(name)
-#         builder = MethodInstructionsBuilder(name, protocol, True, _methods,
-#                                             _resolved, _resolving)
-
-#         for ins_meta in ins_list:
-#             builder.add_instruction(Instruction(ins_meta))
-#         _resolved[addr] = builder.build_and_clear()
-
-#         mi = _resolved[addr]
-#         method_instructions.append(mi)
-
-#         need_resolved = []
-#         for branch in mi.branches:
-#             if branch not in _resolved and branch not in _resolving:
-#                 if branch in _methods and contains_targets(_methods[branch]):
-#                     mi.contains_target = True
-#                     print("FOUND METHOD")
-#                 _resolving.add(branch)
-#                 need_resolved.append(branch)
-#             elif branch not in _resolving:
-#                 if branch in _methods and contains_targets(_methods[branch]):
-#                     mi.contains_target = True
-#                     print("FOUND METHOD")
-
-#         if len(need_resolved) > 0:
-#             # RPC call for branch addrs
-#             b_ins = protocol.get_instructions(need_resolved)
-#             mis = parse_instructions(json.loads(b_ins), count + 1)
-#             for branch_mis in mis:
-#                 method_instructions.append(branch_mis)
-#                 mi.contains_target = mi.contains_target or branch_mis.contains_target
-#             for resolved in need_resolved:
-#                 _resolving.remove(resolved)
-
-#     return method_instructions
 
 
 class AutoVRMethodMap(dict):
