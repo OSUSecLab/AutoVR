@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 import {Classes} from './classes.js'
-import {AllMethods, ResolvedSymbols} from './loader.js'
+import {AllMethods} from './class-loader.js'
+import {ResolvedSymbols} from './resolver.js'
 import {UnityMethod} from './unity_types.js'
 
 export const promiseTimeoutRevert =
@@ -198,38 +199,43 @@ export class Util {
     return Il2Cpp.MemorySnapshot.capture().objects;
   }
 
-  static getActiveObjects(objects: Il2Cpp.Object[]) {
-    let instance = Classes.getInstance();
+  static async getActiveObjects(objects: Il2Cpp.Object[]) {
+      let instance = Classes.getInstance();
     // return objects;
-    return Util.objectsOfClass(instance.Component!.rawImageClass, objects)
+    return await Il2Cpp.mainThread.schedule(() => {
+      return Util.objectsOfClass(instance.Component!.rawImageClass, objects)
         .filter(obj => {
-          try {
-            if (obj.isNull()) {
+            try {
+              if (obj.isNull()) {
+                return false;
+              }
+              let gameObj = obj.method<Il2Cpp.Object>("get_gameObject").invoke();
+              if (gameObj.isNull()) {
+                return false;
+              }
+              let active = gameObj!.tryMethod<boolean>("get_activeInHierarchy");
+              let activeSelf = gameObj!.tryMethod<boolean>("get_activeSelf");
+              if (active && activeSelf) {
+                return active.invoke() && activeSelf.invoke();
+              }
+              return false;
+            } catch (e) {
+              console.log(e);
               return false;
             }
-            let gameObj = obj.method<Il2Cpp.Object>("get_gameObject").invoke();
-            if (gameObj && gameObj.isNull()) {
-              return false;
-            }
-            let active = gameObj!.tryMethod<boolean>("get_activeInHierarchy");
-            if (active) {
-              return active.invoke();
-            } else {
-              return false;
-            }
-          } catch (e) {
-            return false;
-          }
+          });
         });
+
   }
 
   static async getAllActiveObjects() {
-    return Util.getActiveObjects(await Util.getAllObjects());
+    return await Util.getActiveObjects(await Util.getAllObjects());
   }
 
   static isCollider(comp: Il2Cpp.Class): boolean {
+    let classes = Classes.getInstance();
     try {
-      return comp.name.includes("Collider") ||
+      return comp.name.includes("Collider") && comp.isSubclassOf(classes.Collider!.imageClass, false) ||
              (comp.parent !== null && Util.isCollider(comp.parent));
     } catch {
       return false;
@@ -348,6 +354,167 @@ export class Util {
                                         Util.isActiveObject(comp)
                                     ? true
                                     : false);
+  }
+  
+  /**
+   * Handles Unity's async operations.
+   * @param method The method that returns an AsyncOperationHandle.
+   * @param args Arguments to pass to the async method (optional).
+   * @param options Optional configuration for the operation:
+   *   - timeout: Maximum time to wait for the operation to complete (in ms, default: 10,000).
+   *   - retries: Number of retries for transient errors (default: 0).
+   * @returns A Promise resolving to the operation's result.
+   */
+  static async runAsyncOperationHandle<T = any>(
+    method: Il2Cpp.Method,
+    args: any[] = [],
+    options: { timeout?: number; retries?: number } = {}, 
+  ): Promise<T> {
+    const { timeout = 10000, retries = 0 } = options;
+
+    if (!method) {
+      throw new Error("Async method not found.");
+    }
+
+    let instance = Classes.getInstance();
+    const actionGeneric = instance.Action;
+    if (!actionGeneric) {
+      throw new Error("Action class not found.");
+    }
+
+    let attempts = 0;
+
+    const invokeOperation = (): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error("Async operation timed out."));
+        }, timeout);
+
+        try {
+          const handle = method.invoke(...args) as Il2Cpp.Object;
+
+          if (handle.isNull()) {
+            clearTimeout(timeoutId);
+            reject(new Error("AsyncOperationHandle is null."));
+            return;
+          }
+
+          handle.method("add_completed").invoke(
+            Il2Cpp.delegate(actionGeneric.inflate(handle.class), () => {
+              clearTimeout(timeoutId);
+              try {
+                const result = handle.method("get_Result").invoke();
+                const status = handle.method("get_Status").invoke();
+                const exception = handle.method("get_OperationException").invoke();
+                console.log("AsyncOperation exception:", exception);
+                if (exception) {
+                  throw new Error(exception.toString());
+                }
+                console.debug("Async operation completed.");
+                resolve(result as T);
+              } catch (err) {
+                reject(err);
+              }
+            })
+          );
+        } catch (err) {
+          clearTimeout(timeoutId);
+          reject(err);
+        }
+      });
+
+    while (attempts <= retries) {
+      try {
+        return await invokeOperation();
+      } catch (error) {
+        if (attempts < retries) {
+          attempts++;
+          console.warn(`Retrying operation (${attempts}/${retries})...`);
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Async operation failed after retries.");
+  }
+
+  /**
+   * Handles Unity's async operations.
+   * @param method The method that returns an AsyncOperation.
+   * @param args Arguments to pass to the async method (optional).
+   * @param options Optional configuration for the operation:
+   *   - timeout: Maximum time to wait for the operation to complete (in ms, default: 10,000).
+   *   - retries: Number of retries for transient errors (default: 0).
+   * @returns A Promise resolving to the operation's result.
+   */
+  static async runAsyncOperation(
+    method: Il2Cpp.Method,
+    args: any[] = [],
+    parent: Il2Cpp.Object | null = null,
+    options: { timeout?: number; retries?: number, allowSceneActivation?: boolean} = {}
+  ): Promise<Il2Cpp.Object> {
+    const { timeout = 10000, retries = 0, allowSceneActivation = false} = options;
+
+    if (!method) {
+      throw new Error("Async method not found.");
+    }
+
+    if (method.returnType.typeEnum != 18) {
+      throw new Error("Unsupported async operation return type.");
+    }
+
+    let instance = Classes.getInstance();
+    const actionGeneric = instance.Action;
+    if (!actionGeneric) {
+      throw new Error("Action class not found.");
+    }
+
+    let attempts = 0;
+
+    const invokeOperation = (): Promise<Il2Cpp.Object> =>
+      new Promise<Il2Cpp.Object>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error("Async operation timed out."));
+        }, timeout);
+        
+        try {
+          const operation = (parent ? 
+                              parent.method(method.name, method.parameterCount).invoke(...args) : 
+                              method.invoke(...args)) as Il2Cpp.Object;
+          if (allowSceneActivation && operation) {
+            operation.method("set_allowSceneActivation").invoke(true);
+          } 
+
+          const add_completed = operation.method("add_completed");
+          add_completed.invoke(
+            Il2Cpp.delegate(actionGeneric.inflate(instance.AsyncOperation!), () => {
+              clearTimeout(timeoutId);
+              resolve(operation);
+            })
+          );
+        } catch (err) {
+          console.error("invokeOperation()", err);
+          clearTimeout(timeoutId);
+          reject(err);
+          throw err;
+        }
+      });
+
+    while (attempts <= retries) {
+      try {
+        return invokeOperation();
+      } catch (error) {
+        if (attempts < retries) {
+          attempts++;
+          console.warn(`Retrying operation (${attempts}/${retries})...`);
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Async operation failed after retries.");
   }
 }
 

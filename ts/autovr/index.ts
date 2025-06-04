@@ -41,9 +41,7 @@ function run_module() {
         ?) { return RPC.loadSceneEvents(scene_index, delay_scenes_ms); },
     getSceneEvents() { return RPC.getSceneEvents(); },
     loadScene(scene_index) { return RPC.loadScene(scene_index); },
-    unloadScene(scene_index) { return RPC.unloadScene(scene_index); },
     triggerEvent(payload) { return RPC.triggerEvent(payload); },
-    triggerAllEvents(payload) { return RPC.triggerAllEvents(payload); },
     test() { console.log("TEST CALLED"); },
     dispose : function() {}
   };

@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 import {Classes} from './classes.js';
-import {AllMethods, Loader, ResolvedObjects, wait} from './loader.js';
+import {ResolvedObjects} from './resolver.js';
+import {AllMethods} from './class-loader.js';
+import { Loader,  wait} from './loader.js';
 import {UnityObject} from './unity_types.js';
 import {promiseTimeout, Util} from './utils.js';
 
@@ -28,8 +30,7 @@ let blacklist = [
   "System.Char", "System.Type", "Unity.Profiling.ProfilerMarker"
 ]; // List of classes to exclude from event finding
 
-const TIME_BETWEEN_EVENTS = 2000;
-const TIME_BETWEEN_PHYSICS = 3000;
+const TIME_BETWEEN_EVENTS = 100;
 
 export interface Event {
   event: string;
@@ -369,7 +370,7 @@ export class EventLoader {
       var failed = 0;
 
       let efcs_per_event = [];
-      for (const event of loaded) {
+      for (const [key, event] of this.loadedEvents) {
         try {
           if (event.isNull()) {
             console.log("Null event");
@@ -414,7 +415,7 @@ export class EventLoader {
                   delegate.tryField<Il2Cpp.ValueType>("method_ptr")!.value;
               k++;
               call_count++;
-              addrs.push(val.toString());
+              addrs.push(key + "@" + val.toString());
               if (!this.efcs.has(val.toString())) {
                 this.efcs.set(val.toString(), new Set());
               }
@@ -453,21 +454,25 @@ export class EventLoader {
 
   private getActiveCollisionSinks(comps: Il2Cpp.Object[]) {
     let sinks = Util.findCollisionSinks(comps);
+    console.log("COLLISIONS:", sinks.length);
     let enters = new Set<string>();
     let exits = new Set<string>();
     let stays = new Set<string>();
     sinks.forEach(sink => {
       let method = sink.tryMethod("OnCollisionEnter");
       if (method) {
-        enters.add(method.virtualAddress.toString());
+        console.log(sink.class.name + "$$" + method.virtualAddress.toString());
+        enters.add(sink.handle.toString() + "@" + method.virtualAddress.toString());
       }
       method = sink.tryMethod("OnCollisionExit");
       if (method) {
-        exits.add(method.virtualAddress.toString());
+        console.log(sink.class.name + "$$" + method.virtualAddress.toString());
+        exits.add(sink.handle.toString() + "@" + method.virtualAddress.toString());
       }
       method = sink.tryMethod("OnCollisionStay");
       if (method) {
-        stays.add(method.virtualAddress.toString());
+        console.log(sink.class.name + "$$" + method.virtualAddress.toString());
+        stays.add(sink.handle.toString() + "@" + method.virtualAddress.toString());
       }
     });
     return Array.from(enters)
@@ -476,28 +481,32 @@ export class EventLoader {
   }
 
   private getActiveTriggerables(comps: Il2Cpp.Object[]) {
+    let resolvedObjects = ResolvedObjects.getInstance();
     let triggers = Util.findTriggerablesSink(comps);
+    console.log("TRIGGERS:", triggers.length);
     let enters = new Set<string>();
     let exits = new Set<string>();
     let stays = new Set<string>();
     triggers.forEach(trigger => {
+      console.log(trigger.class.name);
       let method = trigger.tryMethod("OnTriggerEnter");
       if (method) {
-        enters.add(method.virtualAddress.toString());
+        enters.add(trigger.handle.toString() + "@" + method.virtualAddress.toString());
       }
       method = trigger.tryMethod("OnTriggerExit");
       if (method) {
-        exits.add(method.virtualAddress.toString());
+        exits.add(trigger.handle.toString() + "@" + method.virtualAddress.toString());
       }
       method = trigger.tryMethod("OnTriggerStay");
       if (method) {
-        stays.add(method.virtualAddress.toString());
+        stays.add(trigger.handle.toString() + "@" + method.virtualAddress.toString());
       }
     });
     return Array.from(enters)
         .concat(Array.from(stays))
         .concat(Array.from(exits));
   }
+
 
   public getEventFunctionCallbacks(objects: Il2Cpp.Object[]) {
     let comps = objects.filter(comp => !this.inVisited(comp));
@@ -613,52 +622,6 @@ export class EventTriggerer {
     return argsList;
   }
 
-  private async invokeSequenceMethod(emMethod: Il2Cpp.Method,
-                                     eObjs: UnityObject[],
-                                     sequence: Array<string>) {
-
-    const instance = AllMethods.getInstance();
-    const resolvedObjects = ResolvedObjects.getInstance();
-    var i = 0;
-    var max = 4;
-    for (const methodVA of sequence) {
-      if (i > max)
-        break;
-      if (instance.contains(methodVA)) {
-        const handle = instance.methods.get(methodVA);
-        const method = new Il2Cpp.Method(new NativePointer(handle!));
-        const mClass = method.class;
-        const objs: UnityObject[] = resolvedObjects.objectsOfClass(mClass);
-
-        for (const obj of objs) {
-          const toInvoke = obj.tryMethod(method.name, method.parameterCount);
-          if (toInvoke && this.ableParams(toInvoke)) {
-            console.log("Triggering", toInvoke.name);
-            try {
-              let bools = this.countBoolParams(toInvoke);
-              if (bools > 0) {
-                for (var j = 0; j < 2; j++) {
-                  const argsList =
-                      this.generateArguments(toInvoke, j == 1 ? true : false);
-                  toInvoke.invoke(...argsList);
-                }
-              } else {
-                const argsList = this.generateArguments(toInvoke);
-                toInvoke.invoke(...argsList);
-              }
-            } catch (e) {
-              console.log(e);
-              continue;
-            }
-          }
-        }
-        await this.triggerEventsOfObjs(emMethod, eObjs);
-        await wait(300);
-        i++;
-      }
-    }
-  }
-
   private async triggerUI(obj: Il2Cpp.Object, method: Il2Cpp.Method) {
     let events = this.loader.efcs;
     let res = {
@@ -752,15 +715,7 @@ export class EventTriggerer {
     if (!instance.Rigidbody) {
       return;
     }
-    const sinkGO = comp.method<Il2Cpp.Object>("get_gameObject").invoke();
-    const sinkRB =
-        sinkGO.method("GetComponent")
-            .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
-            .invoke();
-    if (sinkRB.isNull()) {
-      // console.log("RB null");
-      return;
-    }
+    try {
     method.revert();
     method.implementation = function(v1: Il2Cpp.Object): any {
       console.log("[!]", "collision", comp,
@@ -770,79 +725,115 @@ export class EventTriggerer {
                       .invoke());
       return comp.method(method.name, method.parameterCount).invoke(v1);
     };
-    // console.log("COLLISION SINK", sinkGO);
-    // console.log("COLLISIONABLES", collisionables);
-    // TODO: runOnAllThreads here
-    let collision_count = 0
-    for (var i = 0; i < collisionables.length; i++) {
-      try {
-        let collider = collisionables[i];
-        const colliderRB =
-            collider.method<Il2Cpp.Object>("get_attachedRigidbody").invoke();
-        if (colliderRB.isNull()) {
-          continue;
+    await Il2Cpp.mainThread.schedule(async () => {
+        const sinkGO = comp.method<Il2Cpp.Object>("get_gameObject").invoke();
+        const sinkTransform = sinkGO.method<Il2Cpp.Object>("get_transform").invoke();
+        const sinkRB =
+            sinkGO.method("GetComponent")
+                .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
+                .invoke();
+        if (sinkRB.isNull()) {
+          // console.log("RB null");
+          return;
         }
+        console.log("COLLISION SINK", sinkGO);
+        console.log("COLLISIONABLES", collisionables);
+        // TODO: runOnAllThreads here
+        let collision_count = 0
+        for (var i = 0; i < collisionables.length; i++) {
+          try {
+            let collider = collisionables[i];
+            const colliderGO =
+                collider.method<Il2Cpp.Object>("get_gameObject").invoke();
+            if (colliderGO.equals(sinkGO)) {
+              continue;
+            }
+            const colliderTransform = colliderGO.method<Il2Cpp.Object>("get_transform").invoke();
+            const colliderRB =
+                colliderGO.method("GetComponent")
+                    .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
+                    .invoke();
+            if (colliderRB.isNull()) {
+              continue;
+            }
 
-        const originalPos =
-            colliderRB.method<Il2Cpp.Object>("get_position").invoke();
-        colliderRB.method("set_position")
-            .invoke(sinkRB.method<Il2Cpp.Object>("get_position").invoke());
-        collision_count++;
-        await wait(300);
-        colliderRB.method("set_position").invoke(originalPos);
-      } catch (e: any) {
-        console.log(e.stack);
-        continue;
-      }
+            const originalPos =
+                colliderRB.method<Il2Cpp.Object>("get_position").invoke();
+            console.log("IsActive sinkGO:", sinkGO.method<boolean>("get_activeSelf").invoke());
+            console.log("IsActive colliderGO:", colliderGO.method<boolean>("get_activeSelf").invoke());
+            console.log("Moved to position from ", originalPos);
+            colliderRB.method("set_position")
+                .invoke(sinkRB.method<Il2Cpp.Object>("get_position").invoke());
+            colliderTransform.method("set_position")
+                .invoke(sinkRB.method<Il2Cpp.Object>("get_position").invoke());
+            console.log("Moved to position to ", colliderRB.method<Il2Cpp.Object>("get_position").invoke());
+            collision_count++;
+            await wait(40);
+            console.log("TF POS", originalPos);
+            colliderTransform.method("set_position")
+                .invoke(originalPos);
+            console.log("RB POS", originalPos);
+            colliderRB.method("set_position").invoke(originalPos);
+            console.log("Moved to original position to ", originalPos);
+          } catch (e: any) {
+            console.log(e.stack);
+            continue;
+          }
+        }
+        let res = {
+          "type" : "collisions",
+          "scene" : this.curr_scene,
+          "data" : comp.class.name + "$$" + method.name,
+          "count" : collision_count
+        };
+        send(JSON.stringify(res));
+      });
+    } catch (e) {
+      const u = e as Error;
+      console.log("3", u.stack);
     }
-    let res = {
-      "type" : "collisions",
-      "scene" : this.curr_scene,
-      "data" : collision_count
-    };
-    send(JSON.stringify(res));
   }
 
-  private async triggerEventsOfObjs(method: Il2Cpp.Method,
-                                    objsWithMethod: UnityObject[]) {
+  private async triggerEventsOfObj(method: Il2Cpp.Method,
+                                    objWithMethod: Il2Cpp.Object) {
     const resolvedObjects = ResolvedObjects.getInstance();
     const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
 
-    const colliders = Util.findActiveColliders(objectIl2CppValues);
-    const staticColliders = Util.findStaticColliders(colliders);
-    const kinematicColliders = Util.findKinematicColliders(colliders);
+    await Il2Cpp.mainThread.schedule(async () => {
+      const colliders = Util.findActiveColliders(objectIl2CppValues);
+      const staticColliders = Util.findStaticColliders(colliders);
+      const kinematicColliders = Util.findKinematicColliders(colliders);
 
-    var triggerables = Util.findPotentialTriggerables(colliders);
-    const collisionables = Util.findCollisionables(colliders);
+      var triggerables = Util.findPotentialTriggerables(colliders);
+      const collisionables = Util.findCollisionables(colliders);
 
-    let methodName = method.name;
-    const isTriggerEvent = methodName.includes("OnTrigger");
-    const isCollisionEvent = methodName.includes("OnCollision");
+      let methodName = method.name;
+      const isTriggerEvent = methodName.includes("OnTrigger");
+      const isCollisionEvent = methodName.includes("OnCollision");
 
-    console.log("TRIGGERING", method.class.name + "$$" + methodName,
-                objsWithMethod.length);
-    for (const obj of objsWithMethod) {
+      console.log("TRIGGERING", method.class.name + "$$" + methodName,
+                  objWithMethod);
       try {
-        let unboxed = obj.unbox();
+        console.log(objWithMethod.handle.toString());
         if (!isCollisionEvent && !isTriggerEvent) {
-          await promiseTimeout(20000, this.triggerUI(obj.unbox(), method));
+          await promiseTimeout(100, this.triggerUI(objWithMethod, method));
         } else if (isTriggerEvent) {
           // Static colliders may not be triggered together, according to
           // physics rule matrix.
-          let isStaticCollider = Util.isStaticCollider(unboxed);
-          triggerables = Util.removeStaticTriggerables(triggerables);
-          console.log("TRIGGERABLES", triggerables);
+          let isStaticCollider = Util.isStaticCollider(objWithMethod);
+          if (isStaticCollider) {
+            triggerables = Util.removeStaticTriggerables(triggerables);
+          } 
           await promiseTimeout(
-              20000, this.triggerCollider(method, unboxed, triggerables));
+              100, this.triggerCollider(method, objWithMethod, triggerables));
         } else if (isCollisionEvent) {
-          await promiseTimeout(
-              20000, this.triggerCollision(method, unboxed, colliders));
+          await promiseTimeout( 
+              100, this.triggerCollision(method, objWithMethod, collisionables));
         }
-        await wait(TIME_BETWEEN_PHYSICS);
       } catch (e) {
         console.log(e);
       }
-    }
+    });
   }
 
   private async loadNextEvents() {
@@ -867,28 +858,38 @@ export class EventTriggerer {
     triggeredEvents.clear();
   }
 
-  public async _triggerEvent(eventAddress: string) {
+  public async _triggerEvent(event: string) {
+    if (event.startsWith("scene:")) {
+      return;
+    }   
     const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
     const resolvedObjects = ResolvedObjects.getInstance();
     const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
+    let objEvent = event.split("@");
+    let objHandle = objEvent[0];
+    let eventAddress = objEvent[1];
     let name =
         instance.contains(eventAddress) ? instance.getMethodName(eventAddress)! : eventAddress;
-    if (!triggeredEvents.contains(name)) {
-      triggeredEvents.addEvent(name);
-    }
-    if (instance.contains(eventAddress)) {
+    if (!triggeredEvents.contains(event)) {
+      triggeredEvents.addEvent(event);
+    } 
+    console.log("_triggerEvent", name,  objHandle, " @ ", eventAddress, instance.contains(eventAddress), resolvedObjects.hasObject(objHandle));
+    if (instance.contains(eventAddress) && resolvedObjects.hasObject(objHandle)) {
+      console.log("ABOUT TO TRIGGER", name,  objHandle, " @ ", eventAddress, instance.contains(eventAddress));
       const emHandle = instance.methods.get(eventAddress);
       const emMethod = new Il2Cpp.Method(new NativePointer(emHandle!));
       const emClass = emMethod.class;
       const eObjs: UnityObject[] = resolvedObjects.objectsOfClass(emClass);
-
-      await this.triggerEventsOfObjs(emMethod, eObjs);
+  
+      await this.triggerEventsOfObj(emMethod, resolvedObjects.getObject(objHandle)!);
       // Wait between events avoid breaking
       await wait(TIME_BETWEEN_EVENTS);
     }
-    return await this.loadNextEvents();
-  }
+    let nextEvents = await this.loadNextEvents();
+    return nextEvents;
+  }   
+
 
   public async triggerEvent(eventObj: Event) {
     const instance = AllMethods.getInstance();
@@ -908,45 +909,5 @@ export class EventTriggerer {
       }
     }
     return await this._triggerEvent(event);
-  }
-
-  // Event Addr -> [methods to trigger]
-  public async triggerAllEvents(events: Map<string, Array<string>>) {
-    Loader.preventSceneChanges();
-    Loader.preventAppQuit();
-    const instance = AllMethods.getInstance();
-    const triggeredEvents = TriggeredEvents.getInstance();
-    const resolvedObjects = ResolvedObjects.getInstance();
-    const objectIl2CppValues = resolvedObjects.objectIl2CppValues;
-
-    for (const [event, sequence] of events) {
-      if (triggeredEvents.contains(event)) {
-        continue;
-      }
-      let name =
-          instance.contains(event) ? instance.getMethodName(event)! : event;
-      if (instance.contains(event)) {
-        const emHandle = instance.methods.get(event);
-        const emMethod = new Il2Cpp.Method(new NativePointer(emHandle!));
-        const emClass = emMethod.class;
-        const eObjs: UnityObject[] = resolvedObjects.objectsOfClass(emClass);
-
-        if (sequence.length < 1) {
-          await this.triggerEventsOfObjs(emMethod, eObjs);
-        } else {
-          await this.invokeSequenceMethod(emMethod, eObjs, sequence);
-        }
-        // Wait 1 sec between event groups to avoid breaking
-        await wait(TIME_BETWEEN_EVENTS);
-      }
-      let nextEvents = await this.loadNextEvents();
-      if (nextEvents.length > 1) {
-        return nextEvents;
-      }
-    }
-    await wait(5000); // Wait for any remaining events
-    console.log("DONE");
-    Loader.revertSceneChange();
-    return new Map<string, string>();
   }
 }
