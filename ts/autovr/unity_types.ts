@@ -83,6 +83,7 @@ export class UnityClass {
 
   /** Resolves fully qualified className from assembly image. */
   resolve(image: Il2Cpp.Image, className: string) {
+    console.log(image, className);
     assert(image != null);
     assert(className != null);
     assert(this.imageClass == null);

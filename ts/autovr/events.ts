@@ -468,6 +468,7 @@ export class EventLoader {
   private getActiveTriggerables(comps: Il2Cpp.Object[]) {
     let resolvedObjects = ResolvedObjects.getInstance();
     let triggers = Util.findTriggerablesSink(comps);
+    console.log("TRIGGERS:", triggers.length);
     let enters = new Set<string>();
     let exits = new Set<string>();
     let stays = new Set<string>();
@@ -701,15 +702,6 @@ export class EventTriggerer {
     }
     try {
     await Il2Cpp.mainThread.schedule(async () => {
-        method.revert();
-        method.implementation = function(v1: Il2Cpp.Object): any {
-          console.log("[!]", "collision", comp,
-                      v1.method<Il2Cpp.Object>("get_collider")
-                          .invoke()
-                          .method<Il2Cpp.Object>("get_gameObject")
-                          .invoke());
-          return comp.method(method.name, method.parameterCount).invoke(v1);
-        };
         const sinkGO = comp.method<Il2Cpp.Object>("get_gameObject").invoke();
         const sinkTransform = sinkGO.method<Il2Cpp.Object>("get_transform").invoke();
         const sinkRB =
@@ -717,7 +709,6 @@ export class EventTriggerer {
                 .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
                 .invoke();
         if (sinkRB.isNull()) {
-          console.log("RB null");
           return;
         }
         console.log("COLLISION SINK", sinkGO);
@@ -737,8 +728,11 @@ export class EventTriggerer {
               continue;
             }
             const colliderTransform = colliderGO.method<Il2Cpp.Object>("get_transform").invoke();
-
-            if ((colliderGO.isNull() || !Util.isActiveObject(colliderGO))) {
+            const colliderRB =
+                colliderGO.method("GetComponent")
+                    .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
+                    .invoke();
+            if (colliderRB.isNull()) {
               continue;
             }
 
@@ -809,7 +803,7 @@ export class EventTriggerer {
               100, this.triggerCollider(method, objWithMethod, triggerables));
         } else if (isCollisionEvent) {
           await promiseTimeout( 
-              60000, this.triggerCollision(method, objWithMethod, collisionables));
+              100, this.triggerCollision(method, objWithMethod, collisionables));
         }
       } catch (e) {
         console.log(e);
