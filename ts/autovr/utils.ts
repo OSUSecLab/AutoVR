@@ -348,11 +348,15 @@ export class Util {
   }
 
   static doesCompHaveCollider(comp: Il2Cpp.Object) {
-    const get_GameObject = comp.tryMethod<Il2Cpp.Object>("get_gameObject");
-    if (get_GameObject) {
-      const compGO = get_GameObject.invoke();
-      let components = compGO.method<Il2Cpp.Array<Il2Cpp.Object>>("GetComponentsInChildren", 2).invoke(Classes.getInstance().Collider!.imageClass.type.object, /*includeInactive=*/false);
-      return components.length > 0;
+    try {
+      const get_GameObject = comp.tryMethod<Il2Cpp.Object>("get_gameObject");
+      if (get_GameObject) {
+        const compGO = get_GameObject.invoke();
+        let components = compGO.method<Il2Cpp.Array<Il2Cpp.Object>>("GetComponentsInChildren", 2).invoke(Classes.getInstance().Collider!.imageClass.type.object, /*includeInactive=*/false);
+        return components.length > 0;
+      }
+    } catch (e) {
+      console.log("doesCompHavCollider:", e);
     }
     return false;
   }
