@@ -483,7 +483,6 @@ export class EventLoader {
   private getActiveTriggerables(comps: Il2Cpp.Object[]) {
     let resolvedObjects = ResolvedObjects.getInstance();
     let triggers = Util.findTriggerablesSink(comps);
-    console.log("TRIGGERS:", triggers.length);
     let enters = new Set<string>();
     let exits = new Set<string>();
     let stays = new Set<string>();
@@ -716,16 +715,16 @@ export class EventTriggerer {
       return;
     }
     try {
-    method.revert();
-    method.implementation = function(v1: Il2Cpp.Object): any {
-      console.log("[!]", "collision", comp,
-                  v1.method<Il2Cpp.Object>("get_collider")
-                      .invoke()
-                      .method<Il2Cpp.Object>("get_gameObject")
-                      .invoke());
-      return comp.method(method.name, method.parameterCount).invoke(v1);
-    };
     await Il2Cpp.mainThread.schedule(async () => {
+        method.revert();
+        method.implementation = function(v1: Il2Cpp.Object): any {
+          console.log("[!]", "collision", comp,
+                      v1.method<Il2Cpp.Object>("get_collider")
+                          .invoke()
+                          .method<Il2Cpp.Object>("get_gameObject")
+                          .invoke());
+          return comp.method(method.name, method.parameterCount).invoke(v1);
+        };
         const sinkGO = comp.method<Il2Cpp.Object>("get_gameObject").invoke();
         const sinkTransform = sinkGO.method<Il2Cpp.Object>("get_transform").invoke();
         const sinkRB =
@@ -733,11 +732,11 @@ export class EventTriggerer {
                 .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
                 .invoke();
         if (sinkRB.isNull()) {
-          // console.log("RB null");
+          console.log("RB null");
           return;
         }
         console.log("COLLISION SINK", sinkGO);
-        console.log("COLLISIONABLES", collisionables);
+        console.log("COLLISIONABLES", collisionables.length);
         // TODO: runOnAllThreads here
         let collision_count = 0
         for (var i = 0; i < collisionables.length; i++) {
@@ -749,32 +748,21 @@ export class EventTriggerer {
               continue;
             }
             const colliderTransform = colliderGO.method<Il2Cpp.Object>("get_transform").invoke();
-            const colliderRB =
-                colliderGO.method("GetComponent")
-                    .inflate<Il2Cpp.Object>(instance.Rigidbody!.rawImageClass)
-                    .invoke();
-            if (colliderRB.isNull()) {
-              continue;
-            }
 
             const originalPos =
-                colliderRB.method<Il2Cpp.Object>("get_position").invoke();
-            console.log("IsActive sinkGO:", sinkGO.method<boolean>("get_activeSelf").invoke());
-            console.log("IsActive colliderGO:", colliderGO.method<boolean>("get_activeSelf").invoke());
-            console.log("Moved to position from ", originalPos);
-            colliderRB.method("set_position")
-                .invoke(sinkRB.method<Il2Cpp.Object>("get_position").invoke());
-            colliderTransform.method("set_position")
-                .invoke(sinkRB.method<Il2Cpp.Object>("get_position").invoke());
-            console.log("Moved to position to ", colliderRB.method<Il2Cpp.Object>("get_position").invoke());
+                sinkTransform.method<Il2Cpp.Object>("get_position").invoke();
+            //console.log("Moved to position from ", originalPos);
+            sinkTransform.method("set_position")
+                .invoke(colliderTransform.method<Il2Cpp.Object>("get_position").invoke());
+            sinkRB.method("set_position")
+                .invoke(colliderTransform.method<Il2Cpp.Object>("get_position").invoke());
+            // console.log("Moved to position to ", sinkRB.method<Il2Cpp.Object>("get_position").invoke());
             collision_count++;
             await wait(40);
-            console.log("TF POS", originalPos);
-            colliderTransform.method("set_position")
+            sinkTransform.method("set_position")
                 .invoke(originalPos);
-            console.log("RB POS", originalPos);
-            colliderRB.method("set_position").invoke(originalPos);
-            console.log("Moved to original position to ", originalPos);
+            sinkRB.method("set_position").invoke(originalPos);
+            // console.log("Moved to original position to ", originalPos);
           } catch (e: any) {
             console.log(e.stack);
             continue;
@@ -828,7 +816,7 @@ export class EventTriggerer {
               100, this.triggerCollider(method, objWithMethod, triggerables));
         } else if (isCollisionEvent) {
           await promiseTimeout( 
-              100, this.triggerCollision(method, objWithMethod, collisionables));
+              60000, this.triggerCollision(method, objWithMethod, collisionables));
         }
       } catch (e) {
         console.log(e);
@@ -886,7 +874,7 @@ export class EventTriggerer {
       // Wait between events avoid breaking
       await wait(TIME_BETWEEN_EVENTS);
     }
-    let nextEvents = await this.loadNextEvents();
+    let nextEvents = await Il2Cpp.mainThread.schedule(async () => await this.loadNextEvents());
     return nextEvents;
   }   
 

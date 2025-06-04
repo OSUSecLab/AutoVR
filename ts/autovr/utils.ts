@@ -347,10 +347,20 @@ export class Util {
     });
   }
 
+  static doesCompHaveCollider(comp: Il2Cpp.Object) {
+    const get_GameObject = comp.tryMethod<Il2Cpp.Object>("get_gameObject");
+    if (get_GameObject) {
+      const compGO = get_GameObject.invoke();
+      let components = compGO.method<Il2Cpp.Array<Il2Cpp.Object>>("GetComponentsInChildren", 2).invoke(Classes.getInstance().Collider!.imageClass.type.object, /*includeInactive=*/false);
+      return components.length > 0;
+    }
+    return false;
+  }
+
   static findCollisionSinks(comps: Array<Il2Cpp.Object>) {
-    return comps.filter(comp => (comp.tryMethod("OnCollisionEnter") ||
+    return comps.filter(comp => this.doesCompHaveCollider(comp) && ((comp.tryMethod("OnCollisionEnter") ||
                                  comp.tryMethod("OnCollisionStay") ||
-                                 comp.tryMethod("OnCollisionExit")) &&
+                                 comp.tryMethod("OnCollisionExit"))) &&
                                         Util.isActiveObject(comp)
                                     ? true
                                     : false);
