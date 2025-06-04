@@ -199,15 +199,15 @@ class AutoVR:
                 logger.info("Detach event set, returning")
                 return total_paths
 
-            logger.info(" ".join(next_events))
-            for next_event in next_events:
-                next_event_node = EventNode(next_event, event_node)
-                event_node.addChild(next_event_node)
+            if next_events:
+                logger.info(" ".join(next_events))
+                for next_event in next_events:
+                    next_event_node = EventNode(next_event, event_node)
+                    event_node.addChild(next_event_node)
 
             event_graph.addCompletedEventNode(event_node)
-            if len(event_node.children) > 0:
-                apath = await self.trigger_events_path(app, event_node,
-                                                       event_graph,
+            for child in event_node.children:
+                apath = await self.trigger_events_path(app, child, event_graph,
                                                        detach_event)
                 if apath is not None:
                     total_paths += apath
@@ -270,8 +270,6 @@ class AutoVR:
             all_events |= set(paths)
             while paths and (detach_event is None
                              or not detach_event.is_set()):
-                # TODO(Jkim-Hack): Seems like we can do something with unloading scenes instead of restarting the game.
-                # app.protocol.unload_scene(curr_scene)
                 next_events = set(
                     app.protocol.load_scene_events(curr_scene, delay_scenes))
                 logger.info(f"next_events: {next_events}")
@@ -350,7 +348,7 @@ class AutoVR:
                 self.start(app, curr_scene, start_time, states, delay_scenes,
                            detach_event, should_load_scene)):
             return True  # Should continue if in auto-finish.
-        states["curr_scene"] = curr_scene
+        states["curr_scene"] = curr_scene + 1
         self.collect_metrics(app.package_name, start_time, curr_scene)
 
     async def _auto_finish_scenes(
@@ -420,12 +418,13 @@ class AutoVR:
                                                 detach_event, False)
                 elif _is_in_range(input_val, num_scenes):
                     _ = await self._start_scene(app, states, delay_scenes,
-                                                curr_scene, start_time,
+                                                int(input_val), start_time,
                                                 detach_event, True)
 
         else:
             await self._auto_finish_scenes(app, states, delay_scenes,
-                                           start_scene, num_scenes, start_time, detach_event)
+                                           start_scene, num_scenes, start_time,
+                                           detach_event)
 
     def run(
         self,

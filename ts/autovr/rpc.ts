@@ -17,11 +17,10 @@ import "frida-il2cpp-bridge"
 
 import {Event} from './events.js'
 import {
-  AllClasses,
-  AllMethods,
   Loader,
-  ResolvedSymbols,
 } from "./loader.js"
+import { ResolvedSymbols } from "./resolver.js"
+import { AllClasses, AllMethods} from './class-loader.js'
 import {promiseTimeout, Util} from "./utils.js"
 
 export const loadSceneNotifier = new Int32Array(new SharedArrayBuffer(1024))
@@ -196,31 +195,24 @@ export class RPC {
     return count;
   }
 
-  static loadSceneEvents(scene_index: number, delay_scenes_ms: number = 5000) {
+  static async loadSceneEvents(scene_index: number, delay_scenes_ms: number = 5000) {
     RPC.healthCheckCount = 0;
-    let eventNames = Loader.loadSceneEvents(scene_index, delay_scenes_ms);
+    let eventNames = await Loader.loadSceneEvents(scene_index, delay_scenes_ms);
     console.log("eventNames:", eventNames)
     return eventNames;
   }
   
-  static getSceneEvents() {
+  static async getSceneEvents() {
     RPC.healthCheckCount = 0;
-    let eventNames = Loader.getSceneEvents();
+    let eventNames = await Loader.getSceneEvents();
     console.log("eventNames:", eventNames)
     return eventNames;
   }
 
-  static loadScene(scene_index: number) {
+  static async loadScene(scene_index: number) {
     RPC.healthCheckCount = 0;
     console.log("loadScene:")
-    return Loader.loadScene("", scene_index, true);
-  }
-
-  /** @deprecated */
-  static unloadScene(scene_index: number) {
-    RPC.healthCheckCount = 0;
-    console.log("unloadScene:")
-    return Loader.unloadScene("", scene_index);
+    return await Loader.loadScene(scene_index, true);
   }
 
   static async triggerEvent(payload: string) {
@@ -231,16 +223,6 @@ export class RPC {
     }
     let nextEvents = await Loader.triggerEvent(event);
     console.log("triggerEvent:", nextEvents);
-    return nextEvents;
-  }
-
-  static async triggerAllEvents(payload: string) {
-    RPC.healthCheckCount = 0;
-    let parse = JSON.parse(payload);
-    const events = new Map<string, string[]>(Object.entries(parse));
-    console.log("TRIGGER ALL", events);
-    let nextEvents = await Loader.triggerAllEvents(events);
-    console.log("triggerAllEvents:", nextEvents);
     return nextEvents;
   }
 
