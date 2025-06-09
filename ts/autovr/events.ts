@@ -736,6 +736,10 @@ export class EventTriggerer {
               continue;
             }
 
+            if ((colliderGO.isNull() || !Util.isActiveObject(colliderGO))) {
+              continue;
+            }
+
             const originalPos =
                 sinkTransform.method<Il2Cpp.Object>("get_position").invoke();
             //console.log("Moved to position from ", originalPos);
