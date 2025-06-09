@@ -170,11 +170,11 @@ export class ResolvedAssetBundles {
   
   assetBundles: Il2Cpp.Object[];
 
-  unresolvedAssetBundles: Promise<Il2Cpp.Object>[];
+  unresolvedAssetBundles: Promise<Il2Cpp.Object | null>[];
 
   constructor()  { 
     this.assetBundles = new Array<Il2Cpp.Object>(); 
-    this.unresolvedAssetBundles = new Array<Promise<Il2Cpp.Object>>();
+    this.unresolvedAssetBundles = new Array<Promise<Il2Cpp.Object | null>>();
   }
   
   putAssetBundle(assetBundle: Il2Cpp.Object) {
@@ -182,15 +182,18 @@ export class ResolvedAssetBundles {
   }
 
   
-  putAssetBundleOperation(assetBundleOp: Promise<Il2Cpp.Object>) {
+  putAssetBundleOperation(assetBundleOp: Promise<Il2Cpp.Object | null>) {
     assert(this.classes.AssetBundle!.imageClass);
     this.unresolvedAssetBundles.push(assetBundleOp);
   }
 
   async resolveAssetBundles() {
     // TODO: Streamify
-    for (let assetBundleHandle of this.unresolvedAssetBundles) { 
-      this.putAssetBundle(await assetBundleHandle);
+    for (let assetBundleHandle of this.unresolvedAssetBundles) {  
+      let assetBundle = await assetBundleHandle;
+      if (assetBundle) {
+        this.assetBundles.push(assetBundle);
+      }
     }
     this.unresolvedAssetBundles = [];
   }

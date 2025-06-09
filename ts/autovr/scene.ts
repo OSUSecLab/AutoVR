@@ -29,6 +29,7 @@ export enum SceneType {
   Build = 1,
   AssetBundle = 2,
   Addressable = 3,
+  Count = 4,
 }
 
 export interface Scene {

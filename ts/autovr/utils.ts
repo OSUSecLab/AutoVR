@@ -200,8 +200,7 @@ export class Util {
   }
 
   static async getActiveObjects(objects: Il2Cpp.Object[]) {
-      let instance = Classes.getInstance();
-    // return objects;
+    let instance = Classes.getInstance();
     return await Il2Cpp.mainThread.schedule(() => {
       return Util.objectsOfClass(instance.Component!.rawImageClass, objects)
         .filter(obj => {
@@ -352,11 +351,12 @@ export class Util {
       const get_GameObject = comp.tryMethod<Il2Cpp.Object>("get_gameObject");
       if (get_GameObject) {
         const compGO = get_GameObject.invoke();
-        let components = compGO.method<Il2Cpp.Array<Il2Cpp.Object>>("GetComponentsInChildren", 2).invoke(Classes.getInstance().Collider!.imageClass.type.object, /*includeInactive=*/false);
-        return components.length > 0;
+        let components = compGO.method<Il2Cpp.Object>("GetComponent", 1)
+                               .invoke(Classes.getInstance().Collider!.imageClass.type.object);
+        return !components.isNull();
       }
-    } catch (e) {
-      console.log("doesCompHavCollider:", e);
+    } catch (e: any) {
+      console.log("doesCompHaveCollider:", e.stack);
     }
     return false;
   }
@@ -467,7 +467,7 @@ export class Util {
     args: any[] = [],
     parent: Il2Cpp.Object | null = null,
     options: { timeout?: number; retries?: number, allowSceneActivation?: boolean} = {}
-  ): Promise<Il2Cpp.Object> {
+  ): Promise<Il2Cpp.Object | null> {
     const { timeout = 10000, retries = 0, allowSceneActivation = false} = options;
 
     if (!method) {
@@ -486,8 +486,8 @@ export class Util {
 
     let attempts = 0;
 
-    const invokeOperation = (): Promise<Il2Cpp.Object> =>
-      new Promise<Il2Cpp.Object>((resolve, reject) => {
+    const invokeOperation = (): Promise<Il2Cpp.Object | null> =>
+      new Promise<Il2Cpp.Object | null>((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           reject(new Error("Async operation timed out."));
         }, timeout);
@@ -496,17 +496,29 @@ export class Util {
           const operation = (parent ? 
                               parent.method(method.name, method.parameterCount).invoke(...args) : 
                               method.invoke(...args)) as Il2Cpp.Object;
+          if (operation.isNull()) {
+            resolve(null);
+            return;
+          }
           if (allowSceneActivation && operation) {
             operation.method("set_allowSceneActivation").invoke(true);
           } 
-
-          const add_completed = operation.method("add_completed");
-          add_completed.invoke(
-            Il2Cpp.delegate(actionGeneric.inflate(instance.AsyncOperation!), () => {
-              clearTimeout(timeoutId);
-              resolve(operation);
-            })
-          );
+          const  get_isDone = operation.tryMethod<boolean>("get_isDone");
+          const add_completed = operation.tryMethod("add_completed");
+          if (add_completed) {
+            add_completed.invoke(
+              Il2Cpp.delegate(actionGeneric.inflate(instance.AsyncOperation!), () => {
+                clearTimeout(timeoutId);
+                resolve(operation);
+              })
+            );
+          } else if (get_isDone) {
+            get_isDone.implementation = function() : boolean {
+              let done = get_isDone!.invoke();
+              if (done) resolve(operation);
+              return done;
+            } 
+          }
         } catch (err) {
           console.error("invokeOperation()", err);
           clearTimeout(timeoutId);

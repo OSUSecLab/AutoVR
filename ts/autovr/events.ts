@@ -737,10 +737,14 @@ export class EventTriggerer {
         }
         console.log("COLLISION SINK", sinkGO);
         console.log("COLLISIONABLES", collisionables.length);
-        // TODO: runOnAllThreads here
         let collision_count = 0
         for (var i = 0; i < collisionables.length; i++) {
           try {
+            if (sinkGO.isNull() || !Util.isActiveObject(sinkGO)) {
+              console.log("COLLISION SINK", "NOT ACTIVE OR NULL");
+              break;
+            }
+
             let collider = collisionables[i];
             const colliderGO =
                 collider.method<Il2Cpp.Object>("get_gameObject").invoke();
@@ -748,6 +752,10 @@ export class EventTriggerer {
               continue;
             }
             const colliderTransform = colliderGO.method<Il2Cpp.Object>("get_transform").invoke();
+
+            if ((colliderGO.isNull() || !Util.isActiveObject(colliderGO))) {
+              continue;
+            }
 
             const originalPos =
                 sinkTransform.method<Il2Cpp.Object>("get_position").invoke();
@@ -764,7 +772,7 @@ export class EventTriggerer {
             sinkRB.method("set_position").invoke(originalPos);
             // console.log("Moved to original position to ", originalPos);
           } catch (e: any) {
-            console.log(e.stack);
+            console.error("triggerCollision():", e.stack);
             continue;
           }
         }
@@ -776,9 +784,9 @@ export class EventTriggerer {
         };
         send(JSON.stringify(res));
       });
-    } catch (e) {
-      const u = e as Error;
-      console.log("3", u.stack);
+    } catch (e: any) {
+      console.error("triggerCollision():", e.stack);
+      return;
     }
   }
 
@@ -874,7 +882,7 @@ export class EventTriggerer {
       // Wait between events avoid breaking
       await wait(TIME_BETWEEN_EVENTS);
     }
-    let nextEvents = await Il2Cpp.mainThread.schedule(async () => await this.loadNextEvents());
+    let nextEvents = await this.loadNextEvents();
     return nextEvents;
   }   
 
