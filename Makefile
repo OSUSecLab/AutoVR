@@ -5,7 +5,7 @@ dist:dist/autovr-*-any.whl
 
 dist/autovr-*-any.whl:
 	cd ts && $(MAKE) frida
-	python setup.py bdist_wheel
+	python3 setup.py bdist_wheel
 
 clean:
 	cd ts && $(MAKE) clean
