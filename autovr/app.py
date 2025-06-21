@@ -181,7 +181,8 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         #  }
         res = json.loads(
             self.protocol.init(
-                symbol_payload=json.dumps(scriptMetadataMethods)))
+                symbol_payload=json.dumps(scriptMetadataMethods),
+                bypassSSLPinning=True))
         return AutoVRMethodMap(res["all_methods"])
 
     async def check_health_async(self) -> bool:
@@ -314,12 +315,18 @@ class AutoVRLaunchableFridaAppImpl(AutoVRLaunchableFridaApp):
             )
             process_detach_event.set()
 
-        #if not spawn_package(device_name, host):
-        #    return (None, None, None)
-        #gadget = "re.frida.Gadget"
+        pid = -1
         device = frida.get_device(device_name)
-        pid = device.spawn([host])  # 're.frida.Gadget' if running gadget
-        #pid = device.get_frontmost_application(scope="full").pid
+        if not self.rooted:
+            if not self._spawn_package(device_name, host):
+                return (None, None, None)
+            pid = device.get_frontmost_application(scope="full").pid
+        else:
+            pid = device.spawn([host])  # 're.frida.Gadget' if running gadget
+
+        if pid == -1:
+            logger.error("PID not found. Exiting...")
+            return
 
         session = device.attach(pid)
         session.on("detached", frida_on_detached)

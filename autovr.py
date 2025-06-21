@@ -158,15 +158,13 @@ if __name__ == '__main__':
         'The amount of delay (seconds) between scene loading and event parsing.'
     )
     parser.add_argument('--rooted',
-                        metavar='is_rooted',
-                        type=bool,
+                        action='store_true',
                         default=False,
                         required=False,
-                        help='Set to true if the device is rooted.')
+                        help='Set if the device is rooted.')
     parser.add_argument(
         '--manual',
-        metavar='manual',
-        type=bool,
+        action='store_true',
         default=False,
         required=False,
         help='Set to true if a manual prompt is needed per scene.')

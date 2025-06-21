@@ -3,10 +3,8 @@ import "frida-il2cpp-bridge"
 import {
   AllMethods,
   ClassLoader,
-  ResolvedClasses,
-  ResolvedObjects,
-  ResolvedSymbols
-} from './loader.js'
+} from './class-loader.js'
+import { ResolvedClasses, ResolvedObjects, ResolvedSymbols } from './resolver.js'
 
 const targetMethods = [ "LoadSceneAsyncNameIndexInternal" ];
 var currMethodName = '';
@@ -182,14 +180,6 @@ export class UnityClass {
               method = uMethod.overloads[overloadIndex];
             }
             queue.push(method.virtualAddress.toString());
-            // let ins = UnityClass.resolveInstructions(method.virtualAddress,
-            //                                          methodName, true);
-            // if (overloadIndex >= 0) {
-            //   this.methods!.get(methodName)!.overloads[overloadIndex]
-            //       .instructions = ins;
-            // } else {
-            //   this.methods!.get(methodName)!.instructions = ins;
-            // }
             overloadIndex++;
           } while (overloads.length > overloadIndex);
         }
@@ -232,7 +222,7 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
 
   constructor(parentClass: UnityClass) { this.parentClass = parentClass; }
 
-  /** @internal */
+  /**r@internal */
   addOverload(overload: UnityMethod<ReturnType>) {
     assert(this.initialized);
     this.overloadingMethods.push(overload);
@@ -298,7 +288,7 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
         imageObject = instance.object(baseAddr)!.unbox();
       } else {
         // Something happened? Sequence may not have caught this base addr
-        console.log("Should not happen");
+        console.error("Should not happen");
         return undefined;
       }
     }
@@ -332,25 +322,6 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
     this.methodSignature!.revert();
   }
 
-  // Sets instructions for solvers to use. Does not replace actual instructions.
-  /*
-  set instructions(ins: MethodInstructions) {
-    assert(this.initialized);
-    assert(this.methodSignature != null);
-    this.methodInstructions =
-        new MethodInstructions(ins.instructions, ins.readOffsets,
-                               ins.writeOffsets, ins.containsTarget);
-  }
-  printInstructions() {
-    assert(this.methodInstructions != null);
-    this.methodInstructions.printInstructions();
-  }
-  fieldOffsets() {
-    assert(this.methodInstructions != null);
-    return this.methodInstructions.fieldOffsetsFound;
-  }
-  */
-
   addBase(offset: string|Number) {
     if (offset instanceof Number) {
       this.base = offset;
@@ -358,28 +329,7 @@ export class UnityMethod<ReturnType extends Il2Cpp.Method.ReturnType> {
       this.base = Number(offset);
     }
   }
-  /*
-  get reads() {
-    assert(this.methodInstructions != null);
-    return this.methodInstructions.readOffsets.map(offset => {
-      let num = Number(offset) + Number(this.base);
-      return '0x' + num.toString(16);
-    });
-  }
-
-  get writes() {
-    assert(this.methodInstructions != null);
-    return this.methodInstructions.writeOffsets.map(offset => {
-      let num = Number(offset) + Number(this.base);
-      return '0x' + num.toString(16);
-    });
-  }
-
-  hasTarget() {
-    assert(this.methodInstructions != null);
-    return this.methodInstructions.hasTarget;
-  }
-  */
+  
   get methodName() {
     assert(this.name);
     return this.name;
@@ -434,7 +384,7 @@ export class UnityObject extends Boxable {
       let methods = this.uClass.resolvedMethods;
       methods.forEach(method => { method.addBase(this.base.toString()); });
     } else {
-      console.log("Unable to resolve class from: ", this.imageObject);
+      console.warn("Unable to resolve class from: ", this.imageObject);
     }
   }
 
