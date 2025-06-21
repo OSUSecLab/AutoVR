@@ -45,7 +45,7 @@ Ensure Frida server binary is running on the device.
 ### Usage
 ```bash
 usage: autovr.py [-h] --device device --package package_name [--script-file script_file] [--ssl-offset ssl_offset] [--use-mbed-tls use_mbed_tls]
-                 [--delay_scenes delay_scenes] [--rooted is_rooted]
+                 [--delay_scenes delay_scenes] [--rooted]
 ```
 
 Example:
@@ -56,7 +56,7 @@ python3.11 autovr.py --device 1WMHHA69J92123 --package com.my.package \
                       --ssl-offset 0xdeadbeef \
                       --use-mbed-tls True \
                       --delay_scenes 5000 \
-                      --rooted False
+                      --rooted
 ```
 ## Citing AutoVR
 Pending
