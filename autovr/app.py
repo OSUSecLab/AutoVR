@@ -181,7 +181,8 @@ class AutoVRResumableFridaAppImpl(AutoVRResumableFridaApp):
         #  }
         res = json.loads(
             self.protocol.init(
-                symbol_payload=json.dumps(scriptMetadataMethods)))
+                symbol_payload=json.dumps(scriptMetadataMethods),
+                bypassSSLPinning=True))
         return AutoVRMethodMap(res["all_methods"])
 
     async def check_health_async(self) -> bool:

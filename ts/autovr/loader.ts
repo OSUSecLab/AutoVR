@@ -527,12 +527,12 @@ export class Loader {
     const buildSceneCount = await Loader.getBuildSettingsScenesCount();
     console.log(`SceneCountInBuildSettings: ${buildSceneCount}`);
     
-    const sceneCount = await Loader.getBuildScenesCount();
+    const sceneCount = await Loader.getBuildScenesCount() + 1;
     console.log(`SceneCount: ${sceneCount}`);
 
     const sceneMap = SceneMap.getInstance();
     const count = buildSceneCount > sceneCount ? buildSceneCount : sceneCount;
-    for (let index = 0; index < count; index++) {
+    for (let index = 0; index < count + 1; index++) {
       const scene: Scene = { raw: index, type: SceneType.Build, assetBundle: null };
       sceneMap.setScene(index, scene);
     }
@@ -647,7 +647,7 @@ export class Loader {
 
   
   public static async start(symbol_payload: string,
-                            bypassSSLPinning: boolean) {  
+                            bypassSSLPinning: boolean = true) {  
     console.log("Attaching...");
     
     if (bypassSSLPinning) {
