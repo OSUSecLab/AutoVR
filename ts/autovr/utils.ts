@@ -160,30 +160,29 @@ export class Util {
     }
   }
 
-  static async getAllObjects(): Promise<Il2Cpp.Object[]> {
-    let classes = Classes.getInstance();
-    if (classes.GameObject && classes.Object) {
-      let objs = new Array<Il2Cpp.Object>();
-      try {
-        let promiseObjs = await Util.tryObjectsOnThread();
-        if (promiseObjs) {
-          for (const promise of promiseObjs) {
-            let promiseObj = await promise;
-            objs.push(...promiseObj);
-          }
-        }
-      } catch (e) {
-        let err = e as Error;
-        console.log("GetAllObjects", e, err.stack);
-      }
-      if (objs.length > 0) {
-        return objs;
-      }
-    }
-    console.log("Getting other objects instead...");
-    return Il2Cpp.MemorySnapshot.capture().objects;
-  }
-
+  static async getAllObjects(): Promise<Il2Cpp.Object[]> {                                                                                                     
+    let classes = Classes.getInstance();                                                                                                                       
+    if (classes.GameObject && classes.Object) {                                                                                                                
+      let objs = new Array<Il2Cpp.Object>();                                                                                                                   
+      try {                                                                                                                                                    
+        let promiseObjs = await Util.tryObjectsOnThread();                                                                                                     
+        if (promiseObjs) {                                                                                                                                     
+          for (const promise of promiseObjs) {                                                                                                                 
+            let promiseObj = await promise; 
+            objs = objs.concat(promiseObj);                                                                                                                    
+          }                                                                                                                                                    
+        }                                                                                                                                                      
+      } catch (e) {                                                                                                                                            
+        let err = e as Error;                                                                                                                                  
+        console.log("GetAllObjects", e, err.stack);                                                                                                            
+      }                                                                                                                                                        
+      if (objs.length > 0) {                                                                                                                                   
+        return objs;                                                                                                                                           
+      }                                                                                                                                                        
+    }                                                                                                                                                          
+    console.log("Getting other objects instead...");                                                                                                           
+    return Il2Cpp.MemorySnapshot.capture().objects;                                                                                                            
+  }                                                                                                                                                            
   static async getActiveObjects(objects: Il2Cpp.Object[]) {
     let instance = Classes.getInstance();
     return await Il2Cpp.mainThread.schedule(() => {
@@ -213,6 +212,7 @@ export class Util {
   }
 
   static async getAllActiveObjects() {
+    console.log("getAllActiveObejcts");
     return await Util.getActiveObjects(await Util.getAllObjects());
   }
 
@@ -228,12 +228,15 @@ export class Util {
 
   static isActiveObject(comp: Il2Cpp.Object): boolean {
     try {
+      if (comp.class.isAssignableFrom(Classes.getInstance().GameObject!.imageClass)) {
+        return comp.method<boolean>("get_activeSelf").invoke();
+      }
       return comp.method<Il2Cpp.Object>("get_gameObject")
           .invoke()
-          .method<boolean>("get_activeInHierarchy")
+          .method<boolean>("get_activeSelf")
           .invoke();
     } catch (err) {
-      // console.log(err);
+      console.log(err);
       return false;
     }
   }
@@ -309,8 +312,7 @@ export class Util {
   static findTriggerablesSink(comps: Array<Il2Cpp.Object>) {
     return comps.filter(comp => (comp.tryMethod("OnTriggerEnter") ||
                                  comp.tryMethod("OnTriggerStay") ||
-                                 comp.tryMethod("OnTriggerExit")) &&
-                                        Util.isActiveObject(comp)
+                                 comp.tryMethod("OnTriggerExit"))
                                     ? true
                                     : false);
   }
@@ -347,10 +349,9 @@ export class Util {
   }
 
   static findCollisionSinks(comps: Array<Il2Cpp.Object>) {
-    return comps.filter(comp => this.doesCompHaveCollider(comp) && ((comp.tryMethod("OnCollisionEnter") ||
+    return comps.filter(comp => ((comp.tryMethod("OnCollisionEnter") ||
                                  comp.tryMethod("OnCollisionStay") ||
-                                 comp.tryMethod("OnCollisionExit"))) &&
-                                        Util.isActiveObject(comp)
+                                 comp.tryMethod("OnCollisionExit")))
                                     ? true
                                     : false);
   }

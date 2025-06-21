@@ -68,38 +68,42 @@ export class EventLoader {
     return this.visited.has(comp.handle.toString());
   }
 
-  // objs: additional objects.
-  public findAllUIEvents(comps: Il2Cpp.Object[]) {
-    console.log("-------FINDING UI EVENTS-------")
+  public findAllUIEvents(comps: Il2Cpp.Object[]) {                                                                                                            
+    console.log("-------FINDING UI EVENTS-------")                                                                                                            
     if (this.classes.UnityEvent && this.classes.Object &&
         this.classes.GameObject && this.classes.Component) {
-
-      try {
-        // Explore fields of component class and all subfields
-        // if a field is an object, then it may have subfields.
-        for (const comp of comps) {
-          this.visited.add(comp.handle.toString());
-
-          let fields = comp.class.fields;
+          
+      try {                      
+        // Explore fields of component class and all subfields                                                                                                
+        // if a field is an object, then it may have subfields.                                                                                               
+        for (const comp of comps) {                                                                                                                           
+          this.visited.add(comp.handle.toString());                                                                                                           
+                                                                                                                                                              
+          let fields = comp.class.fields;                                                                                                                     
           let result: FieldData[] = [];
-          let types = new Set<string>(blacklist);
+          let types = new Set<string>(blacklist);                                                                                                             
           fields.forEach(field => {
-            types.add(field.type.name)
-            // Explore subfields to find UI events
-            let found = this.findEventsInField(field, types);
-            if (found.hasUEvent || found.hasCallbackEventHandler) {
-              result.push(found);
-            }
+              try {
+                types.add(field.type.name)                                                                                                                    
+                // Explore subfields to find UI events                                                                                                        
+                let found = this.findEventsInField(field, types);                                                                                             
+                if (found.hasUEvent || found.hasCallbackEventHandler) {                                                                                       
+                  result.push(found);                                                                                                                         
+                }
+              } catch (e) {                                                                                                                                   
+                console.log("1", e);
+              }
           });
-          // Loads UI events
-          this.exploreSubFields(comp, result, types);
+          // Loads UI events                                                                                                                                  
+          this.exploreSubFields(comp, result, types);                                                                                                         
         }
       } catch (ee) {
-        console.log(ee)
-      }
+        console.log("2", ee)                                                                                                                                  
+      }                                                                                                                                                       
     }
-    console.log("-------DONE FINDING UI EVENTS-------")
+    console.log("-------DONE FINDING UI EVENTS-------")                                                                                                       
   }
+
 
   private implementsUIHandler(clazz: Il2Cpp.Class) {
     let classes = Classes.getInstance();
@@ -183,9 +187,9 @@ export class EventLoader {
     fieldDatas.filter(fd => fd.field !== undefined).forEach(fd => {
       let field = fd.field!;
       let fieldName = field.name;
-      if (field && (fd.hasUEvent || fd.hasCallbackEventHandler) &&
-          fd.isUIEvent) {
-        console.log("Component:", component, "Field:", field, fd.isUIEvent,
+      try {
+      if (field && (fd.hasUEvent || fd.hasCallbackEventHandler)) {
+        console.log("Component:", component.class.name, "Field:", field.name, fd.isUIEvent,
                     fd.subFields.length);
         if ((this.fieldNameHas(field, "UnityEvent") ||
              this.fieldNameHas(field, "CallbackEventHandler"))) {
@@ -207,7 +211,7 @@ export class EventLoader {
           let tCopy = new Set(types);
           if (!this.fieldNameHas(field, "UnityEvent") &&
               !this.fieldNameHas(field, "CallbackEventHandler")) {
-            tCopy.add(component.toString());
+            tCopy.add(component.handle.toString());
           }
           let fieldObj =
               component.field<Il2Cpp.Object>(fieldName).value as Il2Cpp.Object;
@@ -218,7 +222,12 @@ export class EventLoader {
           }
         }
       }
+      } catch (e) {
+        const u = e as Error;
+        console.log(u.stack);
+      }
     });
+
   }
 
   private loadUnityEvent(eventObj: Il2Cpp.Object) {
@@ -494,6 +503,7 @@ export class EventLoader {
 
 
   public getEventFunctionCallbacks(objects: Il2Cpp.Object[]) {
+    console.log("getEventFunctionCallbacks");
     let comps = objects.filter(comp => !this.inVisited(comp));
     if (comps.length > 0) {
       let res = this.loadUnityEvents(comps)
@@ -667,13 +677,6 @@ export class EventTriggerer {
       return;
     }
     let compMethod = comp.tryMethod(method.name, method.parameterCount);
-    method.revert();
-    method.implementation = function(v1: Il2Cpp.Object): any {
-      console.log("[!]", "trigger", comp, v1);
-      if (!comp.isNull() && !v1.isNull()) {
-        return comp.method(method.name, method.parameterCount).invoke(v1);
-      }
-    };
     let trigger_count = 0;
     for (const collider of colliders) {
       await Util.runOnAllThreads(() => {
@@ -716,6 +719,7 @@ export class EventTriggerer {
         let collision_count = 0
         for (var i = 0; i < collisionables.length; i++) {
           try {
+            console.log("COLLIDING", i);
             if (sinkGO.isNull() || !Util.isActiveObject(sinkGO)) {
               console.log("COLLISION SINK", "NOT ACTIVE OR NULL");
               break;
@@ -742,18 +746,18 @@ export class EventTriggerer {
 
             const originalPos =
                 sinkTransform.method<Il2Cpp.Object>("get_position").invoke();
-            //console.log("Moved to position from ", originalPos);
+            console.log("Moved to position from ", originalPos);
             sinkTransform.method("set_position")
                 .invoke(colliderTransform.method<Il2Cpp.Object>("get_position").invoke());
             sinkRB.method("set_position")
                 .invoke(colliderTransform.method<Il2Cpp.Object>("get_position").invoke());
-            // console.log("Moved to position to ", sinkRB.method<Il2Cpp.Object>("get_position").invoke());
+            console.log("Moved to position to ", sinkRB.method<Il2Cpp.Object>("get_position").invoke());
             collision_count++;
             await wait(40);
             sinkTransform.method("set_position")
                 .invoke(originalPos);
             sinkRB.method("set_position").invoke(originalPos);
-            // console.log("Moved to original position to ", originalPos);
+            console.log("Moved to original position to ", originalPos);
           } catch (e: any) {
             console.error("triggerCollision():", e.stack);
             continue;
@@ -816,14 +820,15 @@ export class EventTriggerer {
   }
 
   private async loadNextEvents() {
+    console.log("loadNextEvents");
     const instance = AllMethods.getInstance();
     const triggeredEvents = TriggeredEvents.getInstance();
-
+    ResolvedObjects.getInstance().addComps(await Util.getAllActiveObjects());
+    
     // Get all events loaded but ignore already triggered events.
     return this.loader
         .getEventFunctionCallbacks(await Util.getAllActiveObjects())
-        .filter((event) => !triggeredEvents.contains(event) &&
-                           instance.contains(event));
+        .filter((event) => !triggeredEvents.contains(event));
   }
 
   public sendTriggeredEvents() {
@@ -865,8 +870,9 @@ export class EventTriggerer {
       // Wait between events avoid breaking
       await wait(TIME_BETWEEN_EVENTS);
     }
-    let nextEvents = await this.loadNextEvents();
-    return nextEvents;
+    let res = await this.loadNextEvents();
+    console.log("NEXT EVENTS", res);
+    return res;
   }   
 
 

@@ -145,12 +145,11 @@ export class Loader {
 
   private static async getAllObjects(delay_scenes_ms: number)  {
     await wait(delay_scenes_ms);
-    const objects = await Util.getAllActiveObjects();
-    console.log(`Retrieved ${objects.length} active objects.`);
-    return objects;
+    return await Util.getAllActiveObjects();
   }
 
   private static async resolveObjects(currentObjects: Il2Cpp.Object[]) {
+    console.log("resolveEvents");
     ResolvedObjects.getInstance().clear();
     ResolvedObjects.getInstance().addComps(currentObjects);
     let res = {
@@ -240,6 +239,7 @@ export class Loader {
   }
 
   private static async hookLoadSceneExecution(
+    sceneIndex: number,
     beforeHook?: (...parameters: any[]) => void,
     duringHook?: (...parameters: any[]) => void,
     afterHook?: (...parameters: any[]) => void
@@ -268,7 +268,7 @@ export class Loader {
         if (duringHook) {
           duringHook(v1, v2, v3, v4);
         }
-        const operation = loadSceneMethod.executeStatic(v1, v2, v3, v4);
+        let operation = loadSceneMethod.executeStatic(v1, v2, v3, v4);
         console.log("LoadSceneAsyncNameIndexInternal:" + v1 + ":" + v2, v4);
         resolve(v1);
         return operation;
@@ -277,34 +277,37 @@ export class Loader {
         afterHook();
       }
     });
-    return promise;
-  }
-
-  public static async getSceneEvents() {
-    // 0 delay for immediate execution.
-    return await Loader.getAllObjects(0)
-      .then(currentObjects => Loader.resolveObjects(currentObjects));
+    await Loader.loadScene(sceneIndex, true);
+    return await promise;
   }
 
   public static async loadSceneEvents(scene_index: number,
                                     delay_scenes_ms: number = 5000) {
     let instance = Classes.getInstance();
     console.log("loadSceneEvents");
+    await wait(delay_scenes_ms);
     return await Loader
-        .hookLoadSceneExecution(() => {},
+        .hookLoadSceneExecution(scene_index, () => {},
                                 (v1, v2, v3, v4) => {
                                   APIHooker.revertEntitlementCheck_alt();
                                   APIHooker.hookEntitlementCheck_alt();
                                 },
-                                () => {
+                                async () => {
                                   currentEvent = '';
                                   currentScene = scene_index;
                                 })
         .then(() => {
           Loader.revertSceneChange();
+          console.log("getAllObjectEvents");
           return Loader.getAllObjects(delay_scenes_ms);
         })
         .then(currentObjects => Loader.resolveObjects(currentObjects));
+  }
+
+  public static async getSceneEvents() {
+    // 0 delay for immediate execution.
+    return await Loader.getAllObjects(0)
+      .then(currentObjects => Loader.resolveObjects(currentObjects));
   }
 
   public static triggerEvent(event: Event) {
@@ -376,12 +379,15 @@ export class Loader {
             "LoadSceneAsyncNameIndexInternal"
           );
         try {
+          let result = LoadSceneAsyncNameIndexInternal.invoke(Il2Cpp.string(name), index, LoadSceneParameters_instance.unbox(), true);
+          /*
           let result = await Util.runAsyncOperation(LoadSceneAsyncNameIndexInternal, [
             Il2Cpp.string(name),
             index,
             LoadSceneParameters_instance.unbox(),
             true,
           ]);
+         */
           if (result == null) {
             // Something failed within the AsyncOperation.
             return false;
@@ -627,19 +633,23 @@ export class Loader {
   }
 
   public static async countAllScenes() {
-    console.log("Counting all scenes...");
-    // Means we couldn't get the number of scenes through get_sceneCount nor from build index.
-    if (await this.discoverScenesFromBuildSettings() < 1) {
-      await this.discoverScenesFromCount();
-    }
-    await this.discoverScenesFromAssetBundles();
-    return SceneMap.getInstance().count;
+    await wait(3000)
+    return await Il2Cpp.mainThread.schedule(async () => {
+      console.log("Counting all scenes...");
+      // Means we couldn't get the number of scenes through get_sceneCount nor from build index.
+      if (await this.discoverScenesFromBuildSettings() < 1) {
+        await this.discoverScenesFromCount();
+      }
+      await this.discoverScenesFromAssetBundles();
+      return SceneMap.getInstance().count;
+    });
   }
 
   
   public static async start(symbol_payload: string,
                             bypassSSLPinning: boolean) {  
     console.log("Attaching...");
+    
     if (bypassSSLPinning) {
       console.log("Adding hook to bypassing SSL Pinning ...");
       Loader.bypassSSLPinning();
