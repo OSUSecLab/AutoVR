@@ -1,12 +1,16 @@
 import "frida-il2cpp-bridge";
 
-import { Classes } from "./classes.js"
-import { Event, EventLoader, EventTriggerer } from "./events.js"
-import { APIHooker } from "./hooks.js"
-import { Scene, SceneMap, SceneType } from "./scene.js"
-import { Util } from './utils.js'
-import { AllMethods, ClassLoader } from "./class-loader.js";
-import { ResolvedObjects, ResolvedSymbols, ResolvedAssetBundles } from "./resolver.js";
+import {AllMethods, ClassLoader} from "./class-loader.js";
+import {Classes} from "./classes.js"
+import {Event, EventLoader, EventTriggerer} from "./events.js"
+import {APIHooker} from "./hooks.js"
+import {
+  ResolvedAssetBundles,
+  ResolvedObjects,
+  ResolvedSymbols
+} from "./resolver.js";
+import {Scene, SceneMap, SceneType} from "./scene.js"
+import {Util} from './utils.js'
 
 export const wait = (ms: number) =>
     new Promise(resolve => setTimeout(resolve, ms));
@@ -22,7 +26,7 @@ export class Loader {
   protected constructor() {}
 
   private static bypassSSLPinning() {
-    let functionOffset: string | undefined;
+    let functionOffset: string|undefined;
     let useMbedTls = true;
 
     const operation = recv("cert_func", (jsonStr) => {
@@ -39,10 +43,8 @@ export class Loader {
       try {
         APIHooker.bypassJavaSSLPinning();
         console.log("FUNCTION OFFSET:", functionOffset);
-        APIHooker.bypassUnitySSLPinning(
-          new NativePointer(functionOffset),
-          useMbedTls
-        );
+        APIHooker.bypassUnitySSLPinning(new NativePointer(functionOffset),
+                                        useMbedTls);
       } catch (error) {
         console.error("Error during SSL pinning bypass:", error);
       }
@@ -97,14 +99,12 @@ export class Loader {
     }
   }
 
-
   /** Resolves all methods of all classes. */
   private static resolveAllMethods(img: Il2Cpp.Image) {
     console.log(`Resolving methods from image: ${img.name}`);
     img.classes.forEach((clazz) => {
-      clazz.methods.forEach((method) => {
-        AllMethods.getInstance().addMethod(method);
-      });
+      clazz.methods.forEach(
+          (method) => { AllMethods.getInstance().addMethod(method); });
     });
   }
 
@@ -119,8 +119,7 @@ export class Loader {
       let img = assembly.image;
       if (!img) {
         console.warn(
-          `Assembly '${assembly.name}' does not have an image. Skipping...`
-        );
+            `Assembly '${assembly.name}' does not have an image. Skipping...`);
         return;
       }
 
@@ -135,15 +134,15 @@ export class Loader {
     this.listenForScenesFromAssetBundles();
 
     let obj = {
-      base: Il2Cpp.module.base.toString(),
-      all_methods: AllMethods.getInstance().toEntriesWithName(),
+      base : Il2Cpp.module.base.toString(),
+      all_methods : AllMethods.getInstance().toEntriesWithName(),
     };
 
     console.log("Initialization complete.");
     return JSON.stringify(obj);
   }
 
-  private static async getAllObjects(delay_scenes_ms: number)  {
+  private static async getAllObjects(delay_scenes_ms: number) {
     await wait(delay_scenes_ms);
     return await Util.getAllActiveObjects();
   }
@@ -153,9 +152,9 @@ export class Loader {
     ResolvedObjects.getInstance().clear();
     ResolvedObjects.getInstance().addComps(currentObjects);
     let res = {
-      type: "objects_per_scene",
-      scene: currentScene,
-      data: currentObjects.length,
+      type : "objects_per_scene",
+      scene : currentScene,
+      data : currentObjects.length,
     };
     send(JSON.stringify(res));
 
@@ -164,7 +163,8 @@ export class Loader {
     return eventLoader.getEventFunctionCallbacks(currentObjects);
   }
 
-  private static async invokeInitializeAddressables(): Promise<Il2Cpp.Object | null> {
+  private static async invokeInitializeAddressables():
+      Promise<Il2Cpp.Object|null> {
     let instance = Classes.getInstance();
     const Addressables = instance.Addressables;
     if (!Addressables) {
@@ -187,63 +187,53 @@ export class Loader {
     }
   }
 
-  public static async initializeAddressables(): Promise<Il2Cpp.Object | null> {
+  public static async initializeAddressables(): Promise<Il2Cpp.Object|null> {
     let instance = Classes.getInstance();
     if (!instance.Addressables) {
       console.error("Addressables not found. Initialization failed.");
       return null;
     }
 
-    return await Il2Cpp.mainThread.schedule(
-      (): Promise<Il2Cpp.Object | null> => {
-        const Addressables = instance.Addressables!;
+    return await Il2Cpp.mainThread.schedule((): Promise<Il2Cpp.Object|null> => {
+      const Addressables = instance.Addressables!;
 
-        const getStreamingAssetsSubFolderMethod =
+      const getStreamingAssetsSubFolderMethod =
           Addressables.imageClass.method<Il2Cpp.String>(
-            "get_StreamingAssetsSubFolder"
-          );
-        const getBuildPathMethod =
+              "get_StreamingAssetsSubFolder");
+      const getBuildPathMethod =
           Addressables.imageClass.method<Il2Cpp.String>("get_BuildPath");
-        const getPlayerBuildDataPathMethod =
+      const getPlayerBuildDataPathMethod =
           Addressables.imageClass.method<Il2Cpp.String>(
-            "get_PlayerBuildDataPath"
-          );
-        const getRuntimePathMethod =
+              "get_PlayerBuildDataPath");
+      const getRuntimePathMethod =
           Addressables.imageClass.method<Il2Cpp.String>("get_RuntimePath");
 
-        if (getStreamingAssetsSubFolderMethod) {
-          console.log(
-            "StreamingAssetsSubFolder:",
-            getStreamingAssetsSubFolderMethod.invoke().content
-          );
-        }
-
-        if (getBuildPathMethod) {
-          console.log("BuildPath:", getBuildPathMethod.invoke().content);
-        }
-
-        if (getPlayerBuildDataPathMethod) {
-          console.log(
-            "PlayerBuildDataPath:",
-            getPlayerBuildDataPathMethod.invoke().content
-          );
-        }
-
-        if (getRuntimePathMethod) {
-          console.log("RuntimePath:", getRuntimePathMethod.invoke().content);
-        }
-
-        return this.invokeInitializeAddressables();
+      if (getStreamingAssetsSubFolderMethod) {
+        console.log("StreamingAssetsSubFolder:",
+                    getStreamingAssetsSubFolderMethod.invoke().content);
       }
-    );
+
+      if (getBuildPathMethod) {
+        console.log("BuildPath:", getBuildPathMethod.invoke().content);
+      }
+
+      if (getPlayerBuildDataPathMethod) {
+        console.log("PlayerBuildDataPath:",
+                    getPlayerBuildDataPathMethod.invoke().content);
+      }
+
+      if (getRuntimePathMethod) {
+        console.log("RuntimePath:", getRuntimePathMethod.invoke().content);
+      }
+
+      return this.invokeInitializeAddressables();
+    });
   }
 
   private static async hookLoadSceneExecution(
-    sceneIndex: number,
-    beforeHook?: (...parameters: any[]) => void,
-    duringHook?: (...parameters: any[]) => void,
-    afterHook?: (...parameters: any[]) => void
-  ): Promise<number> {
+      sceneIndex: number, beforeHook?: (...parameters: any[]) => void,
+      duringHook?: (...parameters: any[]) => void,
+      afterHook?: (...parameters: any[]) => void): Promise<number> {
     console.log("hookLoadSceneExecution");
 
     let instance = Classes.getInstance();
@@ -252,19 +242,14 @@ export class Loader {
       return Promise.resolve(-1);
     }
 
-    const loadSceneMethod = instance.SceneManager.method(
-      "LoadSceneAsyncNameIndexInternal"
-    );
+    const loadSceneMethod =
+        instance.SceneManager.method("LoadSceneAsyncNameIndexInternal");
     let promise = new Promise<any>((resolve) => {
       if (beforeHook) {
         beforeHook();
       }
-      loadSceneMethod.implementation = function (
-        v1: any,
-        v2: any,
-        v3: any,
-        v4: any
-      ): any {
+      loadSceneMethod.implementation = function(v1: any, v2: any, v3: any,
+                                                v4: any): any {
         if (duringHook) {
           duringHook(v1, v2, v3, v4);
         }
@@ -282,7 +267,7 @@ export class Loader {
   }
 
   public static async loadSceneEvents(scene_index: number,
-                                    delay_scenes_ms: number = 5000) {
+                                      delay_scenes_ms: number = 5000) {
     let instance = Classes.getInstance();
     console.log("loadSceneEvents");
     await wait(delay_scenes_ms);
@@ -306,8 +291,8 @@ export class Loader {
 
   public static async getSceneEvents() {
     // 0 delay for immediate execution.
-    return await Loader.getAllObjects(0)
-      .then(currentObjects => Loader.resolveObjects(currentObjects));
+    return await Loader.getAllObjects(0).then(
+        currentObjects => Loader.resolveObjects(currentObjects));
   }
 
   public static triggerEvent(event: Event) {
@@ -318,12 +303,12 @@ export class Loader {
     let instance = Classes.getInstance();
     if (instance.Application) {
       var quit = instance.Application.rawImageClass.method("Quit", 0);
-      quit.implementation = function (): any {
+      quit.implementation = function(): any {
         console.log("QUIT CALLED");
         return null;
       };
       quit = instance.Application.rawImageClass.method("Quit", 1);
-      quit.implementation = function (): any {
+      quit.implementation = function(): any {
         console.log("QUIT CALLED");
         return null;
       };
@@ -333,12 +318,10 @@ export class Loader {
   public static preventSceneChanges() {
     let instance = Classes.getInstance();
     if (instance.SceneManager) {
-      const method = instance.SceneManager.method(
-        "LoadSceneAsyncNameIndexInternal"
-      );
-      method.implementation = function (v1, v2, v3: Il2Cpp.ValueType, v4): any {
-        return null;
-      };
+      const method =
+          instance.SceneManager.method("LoadSceneAsyncNameIndexInternal");
+      method.implementation = function(v1, v2, v3: Il2Cpp.ValueType,
+                                       v4): any { return null; };
     }
   }
 
@@ -352,43 +335,37 @@ export class Loader {
   }
 
   // Required to run on the IL2CPP main thread.
-  private static async loadSceneIndexRaw(
-    name: string,
-    index: number,
-    single: boolean
-  ) : Promise<boolean> {
+  private static async loadSceneIndexRaw(name: string, index: number,
+                                         single: boolean): Promise<boolean> {
     return await Il2Cpp.mainThread.schedule(async () => {
       const instance = Classes.getInstance();
-      if (
-        instance.LoadSceneParameters &&
-        instance.LoadSceneMode &&
-        instance.AsyncOperation &&
-        instance.SceneManager
-      ) {
+      if (instance.LoadSceneParameters && instance.LoadSceneMode &&
+          instance.AsyncOperation && instance.SceneManager) {
         const LoadSceneParameters_instance =
-          instance.LoadSceneParameters.rawImageClass.new();
+            instance.LoadSceneParameters.rawImageClass.new();
         LoadSceneParameters_instance.method(".ctor").invoke(
-          instance.LoadSceneMode.rawImageClass.field<Il2Cpp.ValueType>(
-            single ? "Single" : "Additive"
-          ).value
-        );
+            instance.LoadSceneMode.rawImageClass
+                .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
+                .value);
         const SceneManager = instance.SceneManager;
 
         const LoadSceneAsyncNameIndexInternal =
-          SceneManager.imageClass.method<Il2Cpp.Object>(
-            "LoadSceneAsyncNameIndexInternal"
-          );
+            SceneManager.imageClass.method<Il2Cpp.Object>(
+                "LoadSceneAsyncNameIndexInternal");
         try {
-          let result = LoadSceneAsyncNameIndexInternal.invoke(Il2Cpp.string(name), index, LoadSceneParameters_instance.unbox(), true);
+          let result = LoadSceneAsyncNameIndexInternal.invoke(
+              Il2Cpp.string(name), index, LoadSceneParameters_instance.unbox(),
+              true);
           /*
-          let result = await Util.runAsyncOperation(LoadSceneAsyncNameIndexInternal, [
+          let result = await
+          Util.runAsyncOperation(LoadSceneAsyncNameIndexInternal, [
             Il2Cpp.string(name),
             index,
             LoadSceneParameters_instance.unbox(),
             true,
           ]);
          */
-          if (result == null) {
+          if (result == null || result.isNull()) {
             // Something failed within the AsyncOperation.
             return false;
           }
@@ -401,12 +378,10 @@ export class Loader {
     });
   }
 
-  private static async loadSceneFromAddressables(
-    key: string,
-    single: boolean,
-    activeOnLoad: boolean = true,
-    priority: number = 100
-  ): Promise<Il2Cpp.Object | null> {
+  private static async loadSceneFromAddressables(key: string, single: boolean,
+                                                 activeOnLoad: boolean = true,
+                                                 priority: number = 100):
+      Promise<Il2Cpp.Object|null> {
     const instance = Classes.getInstance();
     const Addressables = instance.Addressables;
     if (!Addressables) {
@@ -420,25 +395,24 @@ export class Loader {
       return null;
     }
 
-    const LoadSceneAsync = Addressables.imageClass.method("LoadSceneAsync").overload(
-      "System.Object",
-      "UnityEngine.SceneManagement.LoadSceneMode",
-      "System.Boolean",
-      "System.Int32"
-    );
+    const LoadSceneAsync =
+        Addressables.imageClass.method("LoadSceneAsync")
+            .overload("System.Object",
+                      "UnityEngine.SceneManagement.LoadSceneMode",
+                      "System.Boolean", "System.Int32");
     if (!LoadSceneAsync) {
       console.error("LoadSceneAsync method not found.");
       return null;
     }
 
-    const loadMode = LoadSceneMode.rawImageClass.field<Il2Cpp.ValueType>(
-      single ? "Single" : "Additive"
-    ).value;
+    const loadMode =
+        LoadSceneMode.rawImageClass
+            .field<Il2Cpp.ValueType>(single ? "Single" : "Additive")
+            .value;
 
     const sceneInstance = await Util.runAsyncOperationHandle<Il2Cpp.Object>(
-      LoadSceneAsync as Il2Cpp.Method,
-      [Il2Cpp.string(key), loadMode, activeOnLoad, priority]
-    );
+        LoadSceneAsync as Il2Cpp.Method,
+        [ Il2Cpp.string(key), loadMode, activeOnLoad, priority ]);
 
     if (sceneInstance == null) {
       console.error("Failed to load scene from Addressables:", key);
@@ -447,28 +421,27 @@ export class Loader {
     const scene = sceneInstance!.method("get_Scene").invoke() as Il2Cpp.Object;
     return scene;
   }
-  
+
   private static async loadSceneFromAssetBundle(name: string, single: boolean) {
     let instance = Classes.getInstance();
-    let LoadScene = instance.SceneManager!.imageClass.method("LoadScene", 2) as Il2Cpp.Method;
+    let LoadScene = instance.SceneManager!.imageClass.method("LoadScene", 2) as
+                    Il2Cpp.Method;
     try {
       return Il2Cpp.mainThread.schedule(() => {
-        LoadScene.invoke(Il2Cpp.string(name), instance.LoadSceneMode!.rawImageClass.field<Il2Cpp.ValueType>(
-          "Single"
-        ).value);
+        LoadScene.invoke(Il2Cpp.string(name),
+                         instance.LoadSceneMode!.rawImageClass
+                             .field<Il2Cpp.ValueType>("Single")
+                             .value);
       });
     } catch (err) {
       console.error("loadSceneFromAssetBundle:", err);
     }
   }
 
-
-  public static async loadScene(
-    index: number,
-    single: boolean
-  ) {
+  public static async loadScene(index: number, single: boolean) {
     const sceneMap = SceneMap.getInstance();
-    if (!sceneMap.hasScene(index)) return;
+    if (!sceneMap.hasScene(index))
+      return;
 
     let AssetBundle = Classes.getInstance().AssetBundle;
 
@@ -487,7 +460,8 @@ export class Loader {
         console.log("Loading AssetBundle Scene:", scene.raw);
         console.log("===============================================");
         await Loader.loadSceneFromAssetBundle(scene.raw as string, single);
-        // let assets = await ResolvedAssetBundles.getInstance().loadAllAssetBundles();
+        // let assets = await
+        // ResolvedAssetBundles.getInstance().loadAllAssetBundles();
         // console.log("AssetBundles Length:", assets.length);
       } else if (scene.type === SceneType.Addressable) {
         console.log("===============================================");
@@ -507,7 +481,7 @@ export class Loader {
 
   public static async getAllScenesFromCount() {
     var maxSceneCount = 50;
-    var sceneCount = 0; 
+    var sceneCount = 0;
     var ret = null;
     for (var i = 1; i < maxSceneCount; i++) {
       ret = await Loader.loadSceneIndexRaw("", i, true);
@@ -516,24 +490,25 @@ export class Loader {
         break;
       } else {
         await wait(1000);
-      }    
-      sceneCount = i; 
-    }    
+      }
+      sceneCount = i;
+    }
     console.log("getAllScenesFromCount", sceneCount);
-    return sceneCount + 1; 
+    return sceneCount + 1;
   }
-  
+
   private static async discoverScenesFromBuildSettings() {
     const buildSceneCount = await Loader.getBuildSettingsScenesCount();
     console.log(`SceneCountInBuildSettings: ${buildSceneCount}`);
-    
+
     const sceneCount = await Loader.getBuildScenesCount() + 1;
     console.log(`SceneCount: ${sceneCount}`);
 
     const sceneMap = SceneMap.getInstance();
     const count = buildSceneCount > sceneCount ? buildSceneCount : sceneCount;
     for (let index = 0; index < count + 1; index++) {
-      const scene: Scene = { raw: index, type: SceneType.Build, assetBundle: null };
+      const scene:
+          Scene = {raw : index, type : SceneType.Build, assetBundle : null};
       sceneMap.setScene(index, scene);
     }
     return count;
@@ -542,8 +517,8 @@ export class Loader {
   private static async discoverScenesFromCount() {
     const sceneMap = SceneMap.getInstance();
     let count = await Loader.getAllScenesFromCount();
-    for (var i = 0;  i <  count; i++) {
-      sceneMap.addScene({ raw: i, type: SceneType.Count, assetBundle: null });
+    for (var i = 0; i < count; i++) {
+      sceneMap.addScene({raw : i, type : SceneType.Count, assetBundle : null});
     }
   }
 
@@ -553,31 +528,25 @@ export class Loader {
       console.warn("SceneManager not found in instance.");
       return -1;
     }
-    const getSceneCount = instance.SceneManager.tryMethod(
-      "get_sceneCountInBuildSettings"
-    );
+    const getSceneCount =
+        instance.SceneManager.tryMethod("get_sceneCountInBuildSettings");
     if (!getSceneCount) {
       console.warn(
-        "SceneManager does not have 'get_sceneCountInBuildSettings' method."
-      );
+          "SceneManager does not have 'get_sceneCountInBuildSettings' method.");
       return -1;
     }
     return (getSceneCount.executeStatic() as number) ?? 0;
   }
-  
+
   private static async getBuildScenesCount() {
     let instance = Classes.getInstance();
     if (!instance.SceneManager) {
       console.warn("SceneManager not found in instance.");
       return -1;
     }
-    const getSceneCount = instance.SceneManager.tryMethod(
-      "get_sceneCount"
-    );
+    const getSceneCount = instance.SceneManager.tryMethod("get_sceneCount");
     if (!getSceneCount) {
-      console.warn(
-        "SceneManager does not have 'get_sceneCount' method."
-      );
+      console.warn("SceneManager does not have 'get_sceneCount' method.");
       return -1;
     }
     return (getSceneCount.executeStatic() as number) ?? 0;
@@ -587,48 +556,66 @@ export class Loader {
     const assetBundles = ResolvedAssetBundles.getInstance();
     const classes = Classes.getInstance();
     let AssetBundle = classes.AssetBundle;
-    
+
     if (AssetBundle) {
-      let LoadFromFile = AssetBundle.imageClass.tryMethod("LoadFromFile") as Il2Cpp.Method;
+      let LoadFromFile =
+          AssetBundle.imageClass.tryMethod("LoadFromFile") as Il2Cpp.Method;
       if (LoadFromFile) {
-        LoadFromFile.implementation = function(v1: Il2Cpp.String, v2: number, v3: number) {
+        LoadFromFile.implementation = function(v1: Il2Cpp.String, v2: number,
+                                               v3: number) {
           console.log("LoadFromFile", v1, v2, v3);
-         let assetBundle = LoadFromFile.invoke(v1, v2, v3) as Il2Cpp.Object;  
-         assetBundles.putAssetBundle(assetBundle);
-         return assetBundle;
+          let assetBundle = LoadFromFile.invoke(v1, v2, v3) as Il2Cpp.Object;
+          assetBundles.putAssetBundle(assetBundle);
+          return assetBundle;
         };
       }
 
-      let LoadFromFileAsync = AssetBundle.imageClass.tryMethod("LoadFromFileAsync", 2) as Il2Cpp.Method;
+      let LoadFromFileAsync = AssetBundle.imageClass.tryMethod(
+                                  "LoadFromFileAsync", 2) as Il2Cpp.Method;
       if (LoadFromFileAsync) {
         LoadFromFileAsync.implementation = function(...args) {
-          let assetBundleOp = Util.runAsyncOperation(LoadFromFileAsync, args, null)
-              .then((assetBundleCreationRequest: Il2Cpp.Object | null) => 
-                    assetBundleCreationRequest == null ? 
-                      null : assetBundleCreationRequest.method("get_assetBundle").invoke() as Il2Cpp.Object)
-              .catch(err => console.error("LoadFromFileAsync", err)) as Promise<Il2Cpp.Object | null>;
-         if (assetBundleOp != null) assetBundles.putAssetBundleOperation(assetBundleOp);
-         return LoadFromFileAsync.invoke(...args);
+          let assetBundleOp =
+              Util.runAsyncOperation(LoadFromFileAsync, args, null)
+                  .then((assetBundleCreationRequest: Il2Cpp.Object|null) =>
+                            assetBundleCreationRequest == null
+                                ? null
+                                : assetBundleCreationRequest
+                                          .method("get_assetBundle")
+                                          .invoke() as Il2Cpp.Object)
+                  .catch(err => console.error("LoadFromFileAsync", err)) as
+              Promise<Il2Cpp.Object|null>;
+          if (assetBundleOp != null)
+            assetBundles.putAssetBundleOperation(assetBundleOp);
+          return LoadFromFileAsync.invoke(...args);
         };
       }
-      
-      // let LoadFromMemory_Internal = AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as Il2Cpp.Method;
-      // let LoadFromMemoryAsync_Internal = AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as Il2Cpp.Method;
-      // let LoadFromStream_Internal = AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as Il2Cpp.Method;
-      // let LoadFromStreamAsync_Internal = AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as Il2Cpp.Method;
-    }
 
+      // let LoadFromMemory_Internal =
+      // AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as
+      // Il2Cpp.Method; let LoadFromMemoryAsync_Internal =
+      // AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as
+      // Il2Cpp.Method; let LoadFromStream_Internal =
+      // AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as
+      // Il2Cpp.Method; let LoadFromStreamAsync_Internal =
+      // AssetBundle.imageClass.method("LoadFromFileAsync_Internal", 3) as
+      // Il2Cpp.Method;
+    }
   }
-  
+
   private static async discoverScenesFromAssetBundles() {
     const instance = Classes.getInstance();
-    const resolvedAssetBundles = ResolvedAssetBundles.getInstance(); 
+    const resolvedAssetBundles = ResolvedAssetBundles.getInstance();
     let AssetBundle = instance.AssetBundle;
 
-    let abScenes: Map<Il2Cpp.String, Il2Cpp.Object> = await resolvedAssetBundles.resolveScenes();
+    let abScenes: Map<Il2Cpp.String, Il2Cpp.Object> =
+        await resolvedAssetBundles.resolveScenes();
     const sceneMap = SceneMap.getInstance();
     for (let [sceneName, assetBundle] of abScenes) {
-      sceneMap.addScene({ raw: sceneName.content, type: SceneType.AssetBundle, assetBundle: assetBundle });
+      sceneMap.addScene({
+        raw : sceneName.content,
+        type : SceneType.AssetBundle,
+        assetBundle : assetBundle
+      });
     }
   }
 
@@ -636,20 +623,17 @@ export class Loader {
     await wait(3000)
     return await Il2Cpp.mainThread.schedule(async () => {
       console.log("Counting all scenes...");
-      // Means we couldn't get the number of scenes through get_sceneCount nor from build index.
-      if (await this.discoverScenesFromBuildSettings() < 1) {
-        await this.discoverScenesFromCount();
-      }
+      await this.discoverScenesFromBuildSettings();
+      await this.discoverScenesFromCount();
       await this.discoverScenesFromAssetBundles();
       return SceneMap.getInstance().count;
     });
   }
 
-  
   public static async start(symbol_payload: string,
-                            bypassSSLPinning: boolean = true) {  
+                            bypassSSLPinning: boolean = true) {
     console.log("Attaching...");
-    
+
     if (bypassSSLPinning) {
       console.log("Adding hook to bypassing SSL Pinning ...");
       Loader.bypassSSLPinning();
